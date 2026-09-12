@@ -4,10 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
-	"runtime"
 	"strings"
+
+	"github.com/jolehuit/clother/internal/platform"
 )
 
 type Prompter struct {
@@ -37,26 +36,17 @@ func (p *Prompter) Prompt(label, defaultValue string) (string, error) {
 	return value, nil
 }
 
+// PromptSecret reads a secret without echoing it to the terminal.
+//
+// When no terminal is available to switch the echo off on, the plain prompt is
+// used instead of failing: refusing would make the command unusable in the
+// non-interactive setups that rely on it.
 func (p *Prompter) PromptSecret(label string) (string, error) {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
+	value, handled := platform.ReadSecretLine(label, p.Out)
+	if !handled {
 		return p.Prompt(label, "")
 	}
-	defer tty.Close()
-
-	fmt.Fprintf(tty, "%s: ", label)
-	if err := setTTYEcho(false); err != nil {
-		return p.Prompt(label, "")
-	}
-	defer setTTYEcho(true)
-
-	reader := bufio.NewReader(tty)
-	value, readErr := reader.ReadString('\n')
-	fmt.Fprintln(tty)
-	if readErr != nil && readErr != io.EOF {
-		return "", readErr
-	}
-	return strings.TrimSpace(value), nil
+	return value, nil
 }
 
 func (p *Prompter) Confirm(label string, defaultYes bool) (bool, error) {
@@ -75,22 +65,3 @@ func (p *Prompter) Confirm(label string, defaultYes bool) (bool, error) {
 	return strings.HasPrefix(answer, "y"), nil
 }
 
-func setTTYEcho(enabled bool) error {
-	args := []string{}
-	switch runtime.GOOS {
-	case "darwin", "freebsd":
-		args = append(args, "-f", "/dev/tty")
-	default:
-		args = append(args, "-F", "/dev/tty")
-	}
-	if enabled {
-		args = append(args, "echo")
-	} else {
-		args = append(args, "-echo")
-	}
-	cmd := exec.Command("stty", args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	return cmd.Run()
-}

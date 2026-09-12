@@ -56,6 +56,7 @@ func ShowFull(w io.Writer, catalog providers.Catalog) {
 	fmt.Fprintln(w, "  --bin-dir <path>")
 	fmt.Fprintln(w, "  --no-input")
 	fmt.Fprintln(w, "  --no-banner")
+	fmt.Fprintln(w, "  --no-shim")
 	fmt.Fprintln(w, "  --json")
 	fmt.Fprintln(w, "  --plain")
 	fmt.Fprintln(w)

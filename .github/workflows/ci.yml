@@ -22,3 +22,56 @@ jobs:
           if ls tests/*.sh >/dev/null 2>&1; then
             bash -n tests/*.sh
           fi
+
+  # Windows is a supported platform of this fork, and the only place the
+  # Windows-only code paths are ever executed: hardlinks, junctions, the console
+  # mode calls, the rename retry. Without this job the port rots silently.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go test ./...
+      - run: go vet ./...
+      - name: Parse the PowerShell installers
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($file in 'scripts/install.ps1', 'clother.ps1') {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file), [ref]$null, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Host "::error file=$file::$($_.Message)" }
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }
+      - name: Package a release
+        shell: bash
+        run: ./scripts/package-release.sh dist
+      - name: Install from the packaged release
+        shell: pwsh
+        run: |
+          # Consumes exactly what a release publishes — the zip and the checksum
+          # file — through the real installer, into a scratch bin directory.
+          $bin = Join-Path $env:RUNNER_TEMP 'clother-bin'
+          $env:CLOTHER_RELEASE_BASE_URL = "file:///$((Resolve-Path dist).Path -replace '\\','/')"
+          $env:CLOTHER_INSTALL_MODE = 'release'
+          $env:CLOTHER_SKIP_SELF_UPDATE = '1'
+          ./scripts/install.ps1 install --bin-dir $bin
+          if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
+
+          foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-or.exe', 'claude.exe') {
+            $path = Join-Path $bin $name
+            if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
+          }
+          & (Join-Path $bin 'clother-zai.exe') --version
+          & (Join-Path $bin 'clother.exe') list --bin-dir $bin
+          & (Join-Path $bin 'clother.exe') uninstall --bin-dir $bin --yes
+          foreach ($name in 'clother.exe', 'clother-zai.exe', 'claude.exe') {
+            if (Test-Path -LiteralPath (Join-Path $bin $name)) { throw "$name survived uninstall" }
+          }

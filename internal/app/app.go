@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/jolehuit/clother/internal/cli"
 	"github.com/jolehuit/clother/internal/commands"
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 	"github.com/jolehuit/clother/internal/runtime"
@@ -63,7 +63,7 @@ func New(parsed cli.Parsed) (*App, error) {
 }
 
 func Run(ctx context.Context, args []string, argv0 string) (int, error) {
-	if filepath.Base(argv0) == "claude" {
+	if platform.IsClaudeName(argv0) {
 		paths, err := config.Detect("")
 		if err != nil {
 			return 1, err

@@ -21,5 +21,6 @@ jobs:
         with:
           files: |
             dist/clother_*.tar.gz
+            dist/clother_*.zip
             dist/checksums.txt
             dist/latest.json

@@ -7,10 +7,17 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/providers"
 )
 
 var exportPattern = regexp.MustCompile(`^export ([A-Z0-9_]+)="?(.*?)"?$`)
+
+// maxLegacyLauncherSize bounds what will be read as a legacy launcher script.
+// They were a few hundred bytes of shell; anything larger is not one. The guard
+// earns its keep on Windows, where every launcher is a hardlink to the
+// multi-megabyte binary and this migration runs on every single invocation.
+const maxLegacyLauncherSize = 64 << 10
 
 func MigrateLegacyLaunchers(binDir string, catalog providers.Catalog, cfg *File) error {
 	entries, err := os.ReadDir(binDir)
@@ -24,7 +31,10 @@ func MigrateLegacyLaunchers(binDir string, catalog providers.Catalog, cfg *File)
 
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.HasPrefix(name, "clother-") || name == "clother" {
+		if !strings.HasPrefix(name, "clother-") {
+			continue
+		}
+		if info, err := entry.Info(); err != nil || info.Size() > maxLegacyLauncherSize {
 			continue
 		}
 		path := filepath.Join(binDir, name)
@@ -32,7 +42,9 @@ func MigrateLegacyLaunchers(binDir string, catalog providers.Catalog, cfg *File)
 		if err != nil {
 			continue
 		}
-		profile := strings.TrimPrefix(name, "clother-")
+		// The launcher's own name carries the profile, minus whatever extension
+		// the platform requires on disk.
+		profile := strings.TrimPrefix(platform.InvocationName(name), "clother-")
 		envs := map[string]string{}
 		for _, line := range lines {
 			match := exportPattern.FindStringSubmatch(strings.TrimSpace(line))

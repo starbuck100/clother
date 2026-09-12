@@ -255,7 +255,10 @@ func persistConfig(c Context) (int, error) {
 	if execErr != nil {
 		return 1, execErr
 	}
-	if err := launchers.Sync(execPath, c.Paths, c.Catalog, c.Config, runtime.IsHomebrew()); err != nil {
+	if err := launchers.Sync(execPath, c.Paths, c.Catalog, c.Config, launchers.SyncOptions{
+		SkipCopy:          runtime.IsHomebrew(),
+		InstallClaudeShim: !c.Options.NoShim,
+	}); err != nil {
 		return 1, err
 	}
 	c.Output.Success("configuration saved")

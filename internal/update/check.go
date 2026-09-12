@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	defaultMetadataURL = "https://github.com/jolehuit/clother/releases/latest/download/latest.json"
-	checkTTL           = 24 * time.Hour
-	notifyTTL          = 24 * time.Hour
+	checkTTL  = 24 * time.Hour
+	notifyTTL = 24 * time.Hour
 )
 
 type cacheFile struct {
@@ -105,7 +104,7 @@ func metadataURL() string {
 	if override := strings.TrimSpace(os.Getenv("CLOTHER_UPDATE_URL")); override != "" {
 		return override
 	}
-	return defaultMetadataURL
+	return releasesBaseURL() + "/latest/download/latest.json"
 }
 
 func shouldRefresh(cache cacheFile, now time.Time) bool {
@@ -196,8 +195,7 @@ func saveCache(path string, cache cacheFile) error {
 }
 
 func releaseURL(version string) string {
-	tag := displayVersion(version)
-	return "https://github.com/jolehuit/clother/releases/tag/" + tag
+	return releasesBaseURL() + "/tag/" + displayVersion(version)
 }
 
 func displayVersion(version string) string {

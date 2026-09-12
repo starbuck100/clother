@@ -11,8 +11,11 @@ type Options struct {
 	Yes      bool
 	NoInput  bool
 	NoBanner bool
-	BinDir   string
-	Format   string
+	// NoShim installs the provider launchers but leaves `claude` alone: the real
+	// Claude Code keeps its name and no shim is written.
+	NoShim bool
+	BinDir string
+	Format string
 }
 
 type Parsed struct {
@@ -45,6 +48,8 @@ func Parse(args []string) (Parsed, error) {
 			parsed.Options.NoInput = true
 		case "--no-banner":
 			parsed.Options.NoBanner = true
+		case "--no-shim":
+			parsed.Options.NoShim = true
 		case "--json":
 			parsed.Options.Format = "json"
 		case "--plain":

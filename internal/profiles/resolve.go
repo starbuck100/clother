@@ -2,11 +2,11 @@ package profiles
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/providers"
 )
 
@@ -25,8 +25,14 @@ type Target struct {
 	TestURL          string
 }
 
+// Invocation reads the provider profile out of the name the binary was invoked
+// under, which is how every launcher selects its provider.
+//
+// The name is reduced by platform.InvocationName first: on Windows a launcher
+// is `clother-zai.exe` and the extension would otherwise be mistaken for part
+// of the profile name.
 func Invocation(argv0 string) (string, bool) {
-	base := filepath.Base(argv0)
+	base := platform.InvocationName(argv0)
 	if base == "clother" || base == "clother.sh" {
 		return "", false
 	}

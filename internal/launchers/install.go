@@ -8,32 +8,48 @@ import (
 	"strings"
 
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 )
 
 type Manifest struct {
 	Launchers []string `json:"launchers"`
+	// ClaudeShim records the `claude` entry this install created, so uninstall
+	// can tell its own shim apart from a real Claude Code the user put there
+	// afterwards. Manifests written before this field exists leave it empty,
+	// and an empty value means "remove nothing" — the safe direction to err in.
+	ClaudeShim string `json:"claude_shim,omitempty"`
 }
 
-// Sync installs the clother binary and provider symlinks into paths.BinDir.
-//
-// When skipCopy is false (normal install), the binary at execPath is copied to
-// paths.BinDir/clother and symlinks are created relative to it.
-//
-// When skipCopy is true (Homebrew install), no binary is copied; symlinks are
-// created as absolute references to execPath so that a Homebrew-managed binary
-// upgrade is reflected automatically without running `clother install` again.
-func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *config.File, skipCopy bool) error {
+// SyncOptions selects what an install writes.
+type SyncOptions struct {
+	// SkipCopy leaves the binary where it is and points every link at execPath
+	// absolutely, instead of copying it into BinDir. Homebrew installs use it,
+	// so a formula upgrade is picked up without re-running `clother install`.
+	SkipCopy bool
+	// InstallClaudeShim writes the `claude` shim. It is false only when the user
+	// asked for their Claude Code to be left completely untouched.
+	InstallClaudeShim bool
+}
+
+// Sync installs the clother binary and provider launchers into paths.BinDir.
+func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *config.File, opts SyncOptions) error {
 	if err := paths.EnsureBaseDirs(); err != nil {
 		return err
 	}
+	skipCopy := opts.SkipCopy
 
-	symlinkTarget := "clother" // relative — works when binary lives in the same dir
-	if skipCopy {
-		symlinkTarget = execPath // absolute — points directly to the Homebrew binary
-	} else {
-		destBinary := filepath.Join(paths.BinDir, "clother")
+	binaryName := platform.BinaryName() // "clother", or "clother.exe" on Windows
+
+	// The binary is written before any link is created, and that order is
+	// load-bearing on Windows. A hardlink does not follow its original when the
+	// original is replaced, so links made first would keep pointing at the old
+	// file record and every launcher would silently run the previous version.
+	// Writing first means the links below are always made against what is
+	// actually on disk.
+	if !skipCopy {
+		destBinary := filepath.Join(paths.BinDir, binaryName)
 		if err := copyExecutable(execPath, destBinary); err != nil {
 			return err
 		}
@@ -54,8 +70,8 @@ func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *c
 	// Always create gateway symlinks regardless of install method or whether
 	// any dynamic providers are configured. The isDynamicProfile skip above
 	// only applies to per-alias/per-provider symlinks, never to these gateways.
-	desired["clother-or"] = struct{}{}
-	desired["clother-custom"] = struct{}{}
+	desired[platform.LauncherName("or")] = struct{}{}
+	desired[platform.LauncherName("custom")] = struct{}{}
 
 	for _, old := range previous.Launchers {
 		if _, ok := desired[old]; ok {
@@ -71,17 +87,33 @@ func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *c
 	sort.Strings(launchers)
 	for _, name := range launchers {
 		link := filepath.Join(paths.BinDir, name)
+		// Removing first is what makes a re-install pick up a replaced binary,
+		// and it also clears anything a previous version left under this name.
 		_ = os.Remove(link)
-		if err := os.Symlink(symlinkTarget, link); err != nil {
+		if err := platform.LinkLauncher(execPath, binaryName, link, skipCopy); err != nil {
 			return err
 		}
 	}
-	claudeShim := filepath.Join(paths.BinDir, "claude")
+	claudeShim := filepath.Join(paths.BinDir, platform.ClaudeName())
+	if !opts.InstallClaudeShim {
+		// A previous install may have left our shim under this name. It is
+		// removed only when the manifest says we put it there and the file still
+		// is our own binary — the same identity test `clother uninstall` uses.
+		// Under any other name is a real Claude Code, which this install was
+		// asked not to touch.
+		if previous.ClaudeShim != "" && platform.SameInstallation(claudeShim, filepath.Join(paths.BinDir, binaryName)) {
+			_ = os.Remove(claudeShim)
+		}
+		return SaveManifest(paths.ManifestFile, Manifest{Launchers: launchers})
+	}
 	_ = os.Remove(claudeShim)
-	if err := os.Symlink(symlinkTarget, claudeShim); err != nil {
+	if err := platform.LinkShim(execPath, binaryName, claudeShim, skipCopy); err != nil {
 		return err
 	}
-	return SaveManifest(paths.ManifestFile, Manifest{Launchers: launchers})
+	return SaveManifest(paths.ManifestFile, Manifest{
+		Launchers:  launchers,
+		ClaudeShim: platform.ClaudeName(),
+	})
 }
 
 func LoadManifest(path string) (Manifest, error) {
@@ -106,7 +138,7 @@ func SaveManifest(path string, manifest Manifest) error {
 }
 
 func launcherName(profile string) string {
-	return "clother-" + profile
+	return platform.LauncherName(profile)
 }
 
 // isDynamicProfile reports whether a profile is user-defined (OpenRouter alias
@@ -126,30 +158,13 @@ func copyExecutable(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return writeAtomic(dst, data, 0o755)
+	// CopyFile skips the copy when src and dst are already the same file, which
+	// is the usual case: `clother install` runs from the very file it would
+	// otherwise overwrite. On Windows that file cannot be replaced at all while
+	// it is running, so the short-circuit is the only thing that works there.
+	return platform.CopyFile(src, dst)
 }
 
 func writeAtomic(path string, data []byte, mode os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".launcher-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(mode); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return platform.AtomicWrite(path, data, mode)
 }

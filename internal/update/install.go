@@ -2,6 +2,7 @@ package update
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -13,9 +14,9 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
-)
 
-const defaultReleaseBaseURL = "https://github.com/jolehuit/clother/releases/download"
+	"github.com/jolehuit/clother/internal/platform"
+)
 
 func DownloadLatestIfNewer(ctx context.Context, current string) (string, string, func(), error) {
 	if os.Getenv("CLOTHER_SKIP_SELF_UPDATE") == "1" {
@@ -53,7 +54,7 @@ func downloadReleaseBinary(ctx context.Context, version string) (string, func(),
 
 	assetPath := filepath.Join(tmpDir, assetName)
 	checksumsPath := filepath.Join(tmpDir, "checksums.txt")
-	binaryPath := filepath.Join(tmpDir, "clother")
+	binaryPath := filepath.Join(tmpDir, platform.BinaryName())
 
 	if err := downloadFile(ctx, releaseAssetURL(version, assetName), assetPath); err != nil {
 		cleanup()
@@ -74,9 +75,13 @@ func downloadReleaseBinary(ctx context.Context, version string) (string, func(),
 	return binaryPath, cleanup, nil
 }
 
+// releaseAssetName is the asset this platform downloads from a release. The
+// archive format follows the platform, not a preference: a Unix release ships
+// .tar.gz so the executable bit survives, while a Windows release ships .zip,
+// which is what PowerShell can expand without extra tooling.
 func releaseAssetName() (string, error) {
 	switch goruntime.GOOS {
-	case "darwin", "linux":
+	case "darwin", "linux", "windows":
 	default:
 		return "", fmt.Errorf("unsupported operating system %q", goruntime.GOOS)
 	}
@@ -91,14 +96,23 @@ func releaseAssetName() (string, error) {
 		return "", fmt.Errorf("unsupported architecture %q", goruntime.GOARCH)
 	}
 
-	return fmt.Sprintf("clother_%s_%s.tar.gz", goruntime.GOOS, arch), nil
+	return fmt.Sprintf("clother_%s_%s%s", goruntime.GOOS, arch, releaseArchiveExt()), nil
+}
+
+// releaseArchiveExt returns the archive extension used by release assets on
+// this platform, including the leading dot.
+func releaseArchiveExt() string {
+	if platform.IsWindows {
+		return ".zip"
+	}
+	return ".tar.gz"
 }
 
 func releaseAssetURL(version, asset string) string {
 	if base := strings.TrimRight(strings.TrimSpace(os.Getenv("CLOTHER_RELEASE_BASE_URL")), "/"); base != "" {
 		return base + "/" + asset
 	}
-	return strings.TrimRight(defaultReleaseBaseURL, "/") + "/" + displayVersion(version) + "/" + asset
+	return releasesBaseURL() + "/download/" + displayVersion(version) + "/" + asset
 }
 
 func downloadFile(ctx context.Context, url, path string) error {
@@ -171,7 +185,50 @@ func verifyChecksum(assetPath, checksumsPath, assetName string) error {
 	return nil
 }
 
+// binaryEntryNames are the archive members accepted as the clother executable.
+// The Windows member keeps its .exe, the Unix one does not; both are listed on
+// both platforms so that an archive cross-built with the other platform's
+// layout still unpacks instead of failing with a confusing "not found".
+var binaryEntryNames = map[string]bool{
+	"clother":     true,
+	"clother.exe": true,
+}
+
 func extractBinary(assetPath, binaryPath string) error {
+	if strings.HasSuffix(strings.ToLower(assetPath), ".zip") {
+		return extractBinaryZip(assetPath, binaryPath)
+	}
+	return extractBinaryTarGz(assetPath, binaryPath)
+}
+
+// writeBinary streams the archive member through a temporary file in the
+// destination directory and renames it into place, so a failed download never
+// leaves a half-written executable behind.
+func writeBinary(r io.Reader, binaryPath string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(binaryPath), ".binary-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := io.Copy(tmp, r); err != nil {
+		tmp.Close()
+		return err
+	}
+	// A no-op on Windows, where the mode only carries the read-only flag;
+	// meaningful on Unix, where the extracted binary must be executable.
+	if err := tmp.Chmod(0o755); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, binaryPath)
+}
+
+func extractBinaryTarGz(assetPath, binaryPath string) error {
 	file, err := os.Open(assetPath)
 	if err != nil {
 		return err
@@ -193,29 +250,34 @@ func extractBinary(assetPath, binaryPath string) error {
 		if err != nil {
 			return err
 		}
-		if filepath.Base(header.Name) != "clother" {
+		if !binaryEntryNames[filepath.Base(filepath.FromSlash(header.Name))] {
 			continue
 		}
+		return writeBinary(tr, binaryPath)
+	}
+	return fmt.Errorf("clother binary not found in %s", assetPath)
+}
 
-		tmp, err := os.CreateTemp(filepath.Dir(binaryPath), ".binary-*")
+func extractBinaryZip(assetPath, binaryPath string) error {
+	archive, err := zip.OpenReader(assetPath)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+
+	for _, entry := range archive.File {
+		if entry.FileInfo().IsDir() {
+			continue
+		}
+		if !binaryEntryNames[filepath.Base(filepath.FromSlash(entry.Name))] {
+			continue
+		}
+		rc, err := entry.Open()
 		if err != nil {
 			return err
 		}
-		tmpPath := tmp.Name()
-		defer os.Remove(tmpPath)
-
-		if _, err := io.Copy(tmp, tr); err != nil {
-			tmp.Close()
-			return err
-		}
-		if err := tmp.Chmod(0o755); err != nil {
-			tmp.Close()
-			return err
-		}
-		if err := tmp.Close(); err != nil {
-			return err
-		}
-		return os.Rename(tmpPath, binaryPath)
+		defer rc.Close()
+		return writeBinary(rc, binaryPath)
 	}
 	return fmt.Errorf("clother binary not found in %s", assetPath)
 }
