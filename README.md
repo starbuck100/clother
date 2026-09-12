@@ -160,10 +160,12 @@ curl -fsSL https://raw.githubusercontent.com/jolehuit/clother/main/scripts/insta
 ```
 
 ```powershell
-# Windows: the installer passes its arguments through to `clother install`
-.\scripts\install.ps1 install --bin-dir "$env:USERPROFILE\bin"
+# Windows: -BinDir is passed on to `clother install`, and any further
+# arguments are forwarded verbatim
+.\scripts\install.ps1 -BinDir "$env:USERPROFILE\bin"
 
-# or through the environment, which also works for the one-liner
+# or through the environment, which is also the way to do it for the
+# one-liner, where there is no script to pass a parameter to
 $env:CLOTHER_BIN = "$env:USERPROFILE\bin"
 ```
 
