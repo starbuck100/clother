@@ -40,7 +40,11 @@ build_target() {
     ./cmd/clother
 
   if [[ "$os" == "windows" ]]; then
-    (cd "$work" && zip -q "$DIST_DIR/$asset" "$binary")
+    # Not `zip`: Git Bash on Windows does not have it, and the Windows CI job
+    # packages a release with exactly this script. The Go toolchain is already
+    # required here, so the helper costs no new dependency and writes the same
+    # archive on every platform.
+    go run ./scripts/zipasset -o "$DIST_DIR/$asset" "$work/$binary"
   else
     tar -C "$work" -czf "$DIST_DIR/$asset" "$binary"
   fi

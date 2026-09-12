@@ -69,16 +69,24 @@ jobs:
           $env:CLOTHER_RELEASE_BASE_URL = "file:///$((Resolve-Path dist).Path -replace '\\','/')"
           $env:CLOTHER_INSTALL_MODE = 'release'
           $env:CLOTHER_SKIP_SELF_UPDATE = '1'
-          ./scripts/install.ps1 install --bin-dir $bin
+          ./scripts/install.ps1 -BinDir $bin
           if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
 
           foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-or.exe', 'claude.exe') {
             $path = Join-Path $bin $name
             if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
           }
-          & (Join-Path $bin 'clother-zai.exe') --version
-          & (Join-Path $bin 'clother.exe') list --bin-dir $bin
-          & (Join-Path $bin 'clother.exe') uninstall --bin-dir $bin --yes
+          $clother = Join-Path $bin 'clother.exe'
+          # The installed binary has to actually run from where the installer put
+          # it. The provider launchers are not exercised here: they insist on a
+          # configured provider and a real Claude Code, and the Go tests cover
+          # their argv0 dispatch on this same runner.
+          & $clother --version
+          if ($LASTEXITCODE -ne 0) { throw "clother --version exited $LASTEXITCODE" }
+          & $clother list --bin-dir $bin
+          if ($LASTEXITCODE -ne 0) { throw "clother list exited $LASTEXITCODE" }
+          & $clother uninstall --bin-dir $bin --yes
+          if ($LASTEXITCODE -ne 0) { throw "clother uninstall exited $LASTEXITCODE" }
           foreach ($name in 'clother.exe', 'clother-zai.exe', 'claude.exe') {
             if (Test-Path -LiteralPath (Join-Path $bin $name)) { throw "$name survived uninstall" }
           }

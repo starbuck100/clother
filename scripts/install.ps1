@@ -7,7 +7,7 @@
 #
 # or from a checkout, where it builds and runs from source instead:
 #
-#   .\scripts\install.ps1 install --bin-dir $env:USERPROFILE\bin
+#   .\scripts\install.ps1 -BinDir "$env:USERPROFILE\bin"
 #
 # The exit code is clother's own.
 
@@ -16,7 +16,15 @@ param(
     # Install the provider launchers but leave `claude` exactly as it is.
     [switch]$SkipClaudeShim,
 
-    # Everything else goes to clother verbatim.
+    # Where to put the launchers. Spelled out as its own parameter because a
+    # `--bin-dir` sitting in $Arguments depends on how PowerShell's binder
+    # classifies a double-dashed token, and that is not something the caller
+    # should have to reason about.
+    [string]$BinDir,
+
+    # Everything else goes to clother verbatim. Quoting $env:CLOTHER_BIN is the
+    # way to set this for the one-liner, which has no script to pass a parameter
+    # to.
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Arguments
 )
@@ -42,6 +50,9 @@ if (-not $Arguments -or $Arguments.Count -eq 0) {
 }
 if ($SkipClaudeShim -and $Arguments -notcontains '--no-shim') {
     $Arguments += '--no-shim'
+}
+if ($BinDir -and $Arguments -notcontains '--bin-dir') {
+    $Arguments += @('--bin-dir', $BinDir)
 }
 
 function Get-DownloadUrl {
