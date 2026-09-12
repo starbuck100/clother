@@ -41,7 +41,7 @@ func TestInvocationNameIgnoresThePlatformExtension(t *testing.T) {
 	if got := InvocationName(filepath.Join("some", "dir", "clother-zai"+exeExt)); got != "clother-zai" {
 		t.Fatalf("InvocationName() = %q, want clother-zai", got)
 	}
-	if IsClaudeName("claude" + exeExt) != true {
+	if IsClaudeName("claude"+exeExt) != true {
 		t.Fatal("IsClaudeName(claude) = false, want true")
 	}
 	if IsClaudeName("clother-zai" + exeExt) {

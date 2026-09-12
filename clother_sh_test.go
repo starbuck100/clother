@@ -1,3 +1,8 @@
+//go:build !windows
+
+// clother.sh is the Unix bootstrap. On Windows the entry point is
+// scripts/install.ps1, which the CI job exercises end to end instead. Running
+// this under Git Bash would only test curl's handling of a `file://C:\...` URL.
 package clother_test
 
 import (
