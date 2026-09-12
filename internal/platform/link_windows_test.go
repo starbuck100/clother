@@ -26,13 +26,23 @@ func TestLinkDirIsAWorkingJunction(t *testing.T) {
 		t.Fatalf("LinkDir() = %v", err)
 	}
 
+	// Lstat has to see a reparse point rather than a directory — a materialised
+	// directory would mean the target's contents were copied, which is the one
+	// outcome that would let cleanup delete the user's ~/.claude contents.
+	//
+	// Which flavour Go reports is not fixed: it classifies IO_REPARSE_TAG_SYMLINK
+	// as ModeSymlink, and a junction carries IO_REPARSE_TAG_MOUNT_POINT, which
+	// this Go reports as ModeIrregular. Both mean the same thing here, so both
+	// are accepted and only a plain directory fails.
 	info, err := os.Lstat(link)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("%s is not reported as a link (mode %v)", link, info.Mode())
+	if info.Mode()&(os.ModeSymlink|os.ModeIrregular) == 0 {
+		t.Fatalf("%s is not a reparse point (mode %v)", link, info.Mode())
 	}
+	// SameFile follows the reparse point, so this is what proves the link leads
+	// to the target rather than to a copy of it.
 	if !SameFile(link, target) {
 		t.Fatalf("%s does not resolve to %s", link, target)
 	}

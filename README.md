@@ -115,27 +115,9 @@ clother config                          :: Configure providers
 clother update          :: downloads and installs latest release
 ```
 
-Updating `claude` restarts the Claude Code CLI, not Clother. The Windows build uses
-NTFS hardlinks for `clother-*.exe`, so a launcher is the same file as `clother.exe`
-and costs no extra disk space.
-
-#### Install Options (Windows)
-
-By default, Clother installs launchers to:
-- the same directory as your existing `claude.exe`, when `claude` is already on `PATH`
-- otherwise `%USERPROFILE%\bin`
-
-If the chosen bin directory is not on `PATH`, `clother install` prints the exact
-directory to add. Override it with `--bin-dir` or the `CLOTHER_BIN` environment
-variable:
-
-```powershell
-# Using --bin-dir flag
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/starbuck100/clother/main/scripts/install.ps1))) -BinDir "$env:USERPROFILE\bin"
-
-# Using the local copy of the script
-.\scripts\install.ps1 -BinDir "$env:USERPROFILE\bin"
-```
+The Windows build uses NTFS hardlinks for `clother-*.exe`, so a launcher is the
+same file as `clother.exe` rather than a second copy of it. On a filesystem that
+has no hardlinks — FAT32, or a network share — it falls back to copying.
 
 #### The `claude` shim on Windows
 
@@ -162,6 +144,7 @@ By default, Clother installs launchers to:
 - the same directory as your existing `claude` binary, when `claude` is already on `PATH`
 - otherwise **macOS**: `~/bin`
 - otherwise **Linux**: `~/.local/bin` (XDG standard)
+- otherwise **Windows**: `%USERPROFILE%\bin`
 
 If the chosen bin directory is not on `PATH`, `clother install` prints a warning with the exact directory to add.
 
@@ -174,6 +157,14 @@ curl -fsSL https://raw.githubusercontent.com/jolehuit/clother/main/scripts/insta
 # Using environment variable
 export CLOTHER_BIN="$HOME/.local/bin"
 curl -fsSL https://raw.githubusercontent.com/jolehuit/clother/main/scripts/install.sh | bash
+```
+
+```powershell
+# Windows: the installer passes its arguments through to `clother install`
+.\scripts\install.ps1 install --bin-dir "$env:USERPROFILE\bin"
+
+# or through the environment, which also works for the one-liner
+$env:CLOTHER_BIN = "$env:USERPROFILE\bin"
 ```
 
 Clother keeps `claude --resume ...` working with Clother features after install.

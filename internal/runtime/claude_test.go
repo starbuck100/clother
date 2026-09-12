@@ -49,7 +49,10 @@ func TestFindRealClaudeCanUseSameBinDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != want {
+	// SameFile rather than string equality: exec.LookPath on Windows spells the
+	// extension the way PATHEXT does, so it returns claude.EXE for a file named
+	// claude.exe. The two are the same file.
+	if !platform.SameFile(got, want) {
 		t.Fatalf("FindRealClaude() = %q, want %q", got, want)
 	}
 }
