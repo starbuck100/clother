@@ -64,4 +64,3 @@ func (p *Prompter) Confirm(label string, defaultYes bool) (bool, error) {
 	}
 	return strings.HasPrefix(answer, "y"), nil
 }
-
