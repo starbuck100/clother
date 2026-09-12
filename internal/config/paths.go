@@ -4,7 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+
+	"github.com/jolehuit/clother/internal/platform"
 )
 
 type Paths struct {
@@ -25,13 +26,9 @@ func Detect(binOverride string) (Paths, error) {
 		return Paths{}, err
 	}
 
-	xdgConfigHome := getenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	xdgDataHome := getenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	xdgCacheHome := getenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-
-	configDir := getenv("CLOTHER_CONFIG_DIR", filepath.Join(xdgConfigHome, "clother"))
-	dataDir := getenv("CLOTHER_DATA_DIR", filepath.Join(xdgDataHome, "clother"))
-	cacheDir := getenv("CLOTHER_CACHE_DIR", filepath.Join(xdgCacheHome, "clother"))
+	configDir := getenv("CLOTHER_CONFIG_DIR", platform.DefaultConfigDir(home))
+	dataDir := getenv("CLOTHER_DATA_DIR", platform.DefaultDataDir(home))
+	cacheDir := getenv("CLOTHER_CACHE_DIR", platform.DefaultCacheDir(home))
 
 	binDir := getenv("CLOTHER_BIN", "")
 	if binOverride != "" {
@@ -67,10 +64,7 @@ func defaultBinDir(home string) string {
 	if dir := claudeBinDir(); dir != "" {
 		return dir
 	}
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, "bin")
-	}
-	return filepath.Join(home, ".local", "bin")
+	return platform.DefaultBinDir(home)
 }
 
 func claudeBinDir() string {

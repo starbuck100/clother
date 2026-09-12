@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 )
@@ -47,22 +48,19 @@ func PrepareClaudeConfigOverlay(target profiles.Target, args []string, env []str
 		sourceDir = filepath.Join(userHomeDir(), ".claude")
 	}
 
-	overlayDir, err := os.MkdirTemp("", "clother-claude-config-*")
+	overlayDir, err := createOverlayDir(sourceDir)
 	if err != nil {
 		return nil, nil, err
 	}
+	links, err := mirrorClaude(sourceDir, overlayDir)
+	if err != nil {
+		cleanupOverlay(overlayDir, links)
+		return nil, nil, err
+	}
 	cleanup := func() {
-		_ = os.RemoveAll(overlayDir)
+		cleanupOverlay(overlayDir, links)
 	}
 
-	if err := mirrorClaudeConfigDir(sourceDir, overlayDir); err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	if err := mirrorClaudeStateFile(sourceDir, overlayDir); err != nil {
-		cleanup()
-		return nil, nil, err
-	}
 	if err := writePatchedClaudeSettings(sourceDir, overlayDir, sessionModel, claudeEnv); err != nil {
 		cleanup()
 		return nil, nil, err
@@ -117,39 +115,73 @@ func effectiveSessionModel(target profiles.Target, envMap map[string]string) str
 	return ""
 }
 
-func mirrorClaudeConfigDir(sourceDir, overlayDir string) error {
+// overlayLink records where one mirrored entry came from, so cleanup can tell
+// an entry that is still a view of the original apart from one whose original
+// was replaced underneath it.
+type overlayLink struct {
+	overlay string
+	source  string
+}
+
+// mirrorClaude links every entry of the config directory, plus the state file
+// that lives beside it, into the overlay, and reports what it linked.
+//
+// The returned links are not bookkeeping for its own sake: cleanup has to know
+// the exact source of each entry, because guessing it would let a file be moved
+// to the wrong place. See cleanupOverlay in overlay_windows.go.
+func mirrorClaude(sourceDir, overlayDir string) ([]overlayLink, error) {
+	var links []overlayLink
+
 	entries, err := os.ReadDir(sourceDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
+	if err != nil && !os.IsNotExist(err) {
+		return links, err
 	}
 	for _, entry := range entries {
 		// settings.json is rewritten with the patched copy; .claude.json is the
-		// state file, mirrored separately by mirrorClaudeStateFile. Skipping it
-		// here avoids a symlink collision when the config dir also contains its
-		// own .claude.json alongside the home-level one.
+		// state file, mirrored separately below. Skipping it here avoids a link
+		// collision when the config dir also contains its own .claude.json
+		// alongside the home-level one.
 		if entry.Name() == "settings.json" || entry.Name() == ".claude.json" {
 			continue
 		}
 		src := filepath.Join(sourceDir, entry.Name())
 		dst := filepath.Join(overlayDir, entry.Name())
-		if err := os.Symlink(src, dst); err != nil {
-			return fmt.Errorf("symlink %s: %w", entry.Name(), err)
+		if err := linkOverlayEntry(src, dst); err != nil {
+			return links, fmt.Errorf("link %s: %w", entry.Name(), err)
 		}
+		links = append(links, overlayLink{overlay: dst, source: src})
 	}
-	return nil
+
+	statePath := filepath.Join(filepath.Dir(sourceDir), ".claude.json")
+	if _, err := os.Stat(statePath); err != nil {
+		if os.IsNotExist(err) {
+			return links, nil
+		}
+		return links, err
+	}
+	dst := filepath.Join(overlayDir, ".claude.json")
+	if err := linkOverlayEntry(statePath, dst); err != nil {
+		return links, fmt.Errorf("link .claude.json: %w", err)
+	}
+	return append(links, overlayLink{overlay: dst, source: statePath}), nil
 }
 
-func mirrorClaudeStateFile(sourceDir, overlayDir string) error {
-	statePath := filepath.Join(filepath.Dir(sourceDir), ".claude.json")
-	if _, err := os.Stat(statePath); os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
+// linkOverlayEntry mirrors one entry into the overlay — a directory link for a
+// directory, a file link for a file, never a copy.
+//
+// This is load-bearing. Claude Code writes new sessions into
+// CLAUDE_CONFIG_DIR/projects, so a *copied* projects directory would collect
+// the entire session history for the duration of the run and then have it
+// deleted together with the overlay.
+func linkOverlayEntry(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
 		return err
 	}
-	return os.Symlink(statePath, filepath.Join(overlayDir, ".claude.json"))
+	if info.IsDir() {
+		return platform.LinkDir(src, dst)
+	}
+	return platform.LinkOrCopy(src, dst)
 }
 
 func writePatchedClaudeSettings(sourceDir, overlayDir, sessionModel string, envMap map[string]string) error {

@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/jolehuit/clother/internal/platform"
 )
 
 type Format string
@@ -24,9 +26,12 @@ type Output struct {
 }
 
 func New(format Format, quiet bool) *Output {
+	// Turning on virtual terminal processing is what makes the escape sequences
+	// below render on a Windows console instead of printing themselves.
+	platform.EnableVirtualTerminal()
 	stdout := os.Stdout
 	stderr := os.Stderr
-	color := format == FormatHuman && os.Getenv("NO_COLOR") == "" && isTTY(stdout)
+	color := format == FormatHuman && os.Getenv("NO_COLOR") == "" && platform.IsTerminal(stdout)
 	return &Output{
 		Stdout: stdout,
 		Stderr: stderr,
@@ -34,11 +39,6 @@ func New(format Format, quiet bool) *Output {
 		Quiet:  quiet,
 		Color:  color,
 	}
-}
-
-func isTTY(file *os.File) bool {
-	info, err := file.Stat()
-	return err == nil && (info.Mode()&os.ModeCharDevice) != 0
 }
 
 func (o *Output) Header(title string) {

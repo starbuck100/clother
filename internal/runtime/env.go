@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 )
@@ -82,9 +83,17 @@ func BuildEnv(target profiles.Target, secrets config.Secrets) ([]string, error) 
 	return flattenEnv(envMap), nil
 }
 
+// clearAnthropicEnv removes every inherited Anthropic variable before the
+// launcher sets its own.
+//
+// The prefix test goes through platform.HasEnvPrefix rather than
+// strings.HasPrefix because Windows folds environment variable names: a
+// lowercase `anthropic_api_key` left in the environment is the same variable as
+// ANTHROPIC_API_KEY there, and it would otherwise survive the scrub and reach
+// the provider's process.
 func clearAnthropicEnv(envMap map[string]string) {
 	for key := range envMap {
-		if strings.HasPrefix(key, "ANTHROPIC_") {
+		if platform.HasEnvPrefix(key, "ANTHROPIC_") {
 			delete(envMap, key)
 		}
 	}

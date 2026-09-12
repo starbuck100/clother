@@ -8,10 +8,10 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/session"
 	"github.com/jolehuit/clother/internal/ui"
@@ -88,26 +88,10 @@ func runWithTemporaryPatch(ctx context.Context, claudePath string, paths config.
 	return code, true, err
 }
 
-func forwardSignals(process *os.Process, signals <-chan os.Signal) {
-	for sig := range signals {
-		if signalValue, ok := sig.(syscall.Signal); ok {
-			_ = process.Signal(signalValue)
-		}
-	}
-}
-
-func execReplace(path string, args []string, env []string) (int, error) {
-	argv := append([]string{"claude"}, args...)
-	if err := syscall.Exec(path, argv, env); err != nil {
-		return 1, err
-	}
-	return 0, nil
-}
-
 func runClaudeCommand(ctx context.Context, claudePath string, args []string, env []string, resumeCommand string) (int, error) {
 	before, cwd := currentProjectSession()
 
-	cmd := exec.CommandContext(ctx, claudePath, args...)
+	cmd := platform.CommandFor(ctx, claudePath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -160,11 +144,20 @@ func printResumeHintFromProject(cwd string, before session.ProjectSession, resum
 }
 
 func isTTY(file *os.File) bool {
-	info, err := file.Stat()
-	return err == nil && (info.Mode()&os.ModeCharDevice) != 0
+	return platform.IsTerminal(file)
 }
 
 func userHomeDir() string {
-	home, _ := os.UserHomeDir()
-	return home
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home
+	}
+	// os.UserHomeDir reads %USERPROFILE% on Windows and $HOME on Unix; these
+	// are the same fallbacks it uses internally, kept so a stripped environment
+	// degrades to a relative path rather than failing a launch outright.
+	for _, key := range []string{"HOME", "USERPROFILE"} {
+		if home := os.Getenv(key); home != "" {
+			return home
+		}
+	}
+	return ""
 }

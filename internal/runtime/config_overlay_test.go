@@ -6,13 +6,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jolehuit/clother/internal/platform"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
+	"github.com/jolehuit/clother/internal/testutil"
 )
 
 func TestPrepareClaudeConfigOverlayMirrorsConfigAndPinsModel(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	claudeDir := filepath.Join(home, ".claude")
 	if err := os.MkdirAll(filepath.Join(claudeDir, "teams"), 0o755); err != nil {
@@ -77,21 +79,26 @@ func TestPrepareClaudeConfigOverlayMirrorsConfigAndPinsModel(t *testing.T) {
 	if settingsEnv["CLAUDE_CODE_SUBAGENT_MODEL"] != "glm-5" {
 		t.Fatalf("patched CLAUDE_CODE_SUBAGENT_MODEL = %v, want glm-5", settingsEnv["CLAUDE_CODE_SUBAGENT_MODEL"])
 	}
+	// Mirrored, not copied. On Unix that is a symlink, on Windows a junction for
+	// the directory and a hardlink for the file; what has to hold either way is
+	// that the overlay entry *is* the original.
 	markerPath := filepath.Join(overlayDir, "teams")
-	info, err := os.Lstat(markerPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected %s to be a symlink", markerPath)
+	if !platform.SameFile(markerPath, filepath.Join(claudeDir, "teams")) {
+		t.Fatalf("%s is not the original directory", markerPath)
 	}
 	statePath := filepath.Join(overlayDir, ".claude.json")
-	stateInfo, err := os.Lstat(statePath)
-	if err != nil {
+	if !platform.SameFile(statePath, filepath.Join(home, ".claude.json")) {
+		t.Fatalf("%s is not the home-level state file", statePath)
+	}
+
+	// A write through the mirrored directory must reach the original, or the
+	// session history Claude Code records during a run would be deleted together
+	// with the overlay.
+	if err := os.WriteFile(filepath.Join(markerPath, "written.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if stateInfo.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected %s to be a symlink", statePath)
+	if _, err := os.Stat(filepath.Join(claudeDir, "teams", "written.txt")); err != nil {
+		t.Fatalf("writing through the overlay did not reach the config directory: %v", err)
 	}
 
 	cleanup()
@@ -113,7 +120,7 @@ func TestPrepareClaudeConfigOverlaySkipsNativeClaude(t *testing.T) {
 
 func TestPrepareClaudeConfigOverlayHandlesStateFileInsideConfigDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	claudeDir := filepath.Join(home, ".claude")
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
@@ -149,18 +156,15 @@ func TestPrepareClaudeConfigOverlayHandlesStateFileInsideConfigDir(t *testing.T)
 	if overlayDir == "" {
 		t.Fatal("expected CLAUDE_CONFIG_DIR override")
 	}
-	statePath := filepath.Join(overlayDir, ".claude.json")
-	if info, err := os.Lstat(statePath); err != nil {
-		t.Fatalf("overlay .claude.json missing: %v", err)
-	} else if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected %s to be a symlink", statePath)
-	}
 	// The canonical home-level state file must be mirrored, not the in-dir copy.
-	resolved, err := os.Readlink(statePath)
-	if err != nil {
-		t.Fatal(err)
+	statePath := filepath.Join(overlayDir, ".claude.json")
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("overlay .claude.json missing: %v", err)
 	}
-	if resolved != homeState {
-		t.Fatalf("overlay state points to %q, want home state %q", resolved, homeState)
+	if !platform.SameFile(statePath, homeState) {
+		t.Fatalf("overlay state is not the home-level state file %s", homeState)
+	}
+	if platform.SameFile(statePath, filepath.Join(claudeDir, ".claude.json")) {
+		t.Fatalf("overlay state points at the in-dir copy instead of %s", homeState)
 	}
 }
