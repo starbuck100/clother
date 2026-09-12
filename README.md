@@ -92,6 +92,70 @@ This installs:
 - `clother-*` provider launchers
 - resume compatibility for `claude --resume ...`
 
+### PowerShell (Windows)
+
+Native Windows — no WSL, no Go toolchain. Run this in `cmd.exe` or PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/starbuck100/clother/main/scripts/install.ps1 | iex"
+```
+
+```bat
+:: 2. Start using it
+clother-native                          :: Use your Claude Pro/Max/Team subscription
+clother-zai                             :: Z.AI (GLM-5.2)
+clother-zai --yolo                      :: Skip permission prompts
+clother-kimi                            :: Kimi (K3)
+clother-ollama --model qwen3-coder      :: Local with Ollama
+clother config                          :: Configure providers
+```
+
+**Update:**
+```powershell
+clother update          :: downloads and installs latest release
+```
+
+Updating `claude` restarts the Claude Code CLI, not Clother. The Windows build uses
+NTFS hardlinks for `clother-*.exe`, so a launcher is the same file as `clother.exe`
+and costs no extra disk space.
+
+#### Install Options (Windows)
+
+By default, Clother installs launchers to:
+- the same directory as your existing `claude.exe`, when `claude` is already on `PATH`
+- otherwise `%USERPROFILE%\bin`
+
+If the chosen bin directory is not on `PATH`, `clother install` prints the exact
+directory to add. Override it with `--bin-dir` or the `CLOTHER_BIN` environment
+variable:
+
+```powershell
+# Using --bin-dir flag
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/starbuck100/clother/main/scripts/install.ps1))) -BinDir "$env:USERPROFILE\bin"
+
+# Using the local copy of the script
+.\scripts\install.ps1 -BinDir "$env:USERPROFILE\bin"
+```
+
+#### The `claude` shim on Windows
+
+Like on macOS and Linux, the installer puts a `claude` on your `PATH` that hands
+off to Clother, and moves your existing Claude Code aside to `claude-real`. That is
+deliberate and reversible:
+
+- `clother uninstall` puts `claude-real` back as `claude`. If you installed Claude
+  Code again in the meantime, Clother leaves *your* newer binary alone.
+- Skip the shim entirely with `-SkipClaudeShim` and keep working through
+  `clother-*.exe` only:
+
+```powershell
+.\scripts\install.ps1 -SkipClaudeShim
+```
+
+On Windows the shim is a copy rather than a hardlink. Claude Code's own updater
+rewrites `claude.exe` in place, and a hardlink would make that rewrite clobber
+`clother.exe` with it.
+
 ### Install Options
 
 By default, Clother installs launchers to:
@@ -327,13 +391,14 @@ To configure it:
 3. Set it to the **full path** of your chosen launcher:
    - macOS: `/Users/yourname/bin/clother-zai`
    - Linux: `/home/yourname/.local/bin/clother-zai`
+   - Windows: `C:\Users\yourname\bin\clother-zai.exe`
 4. Reload VS Code.
 
 > **Note**: Requires Clother v2.6+ (which handles non-interactive shell output correctly).
 
 ## Platform Support
 
-macOS (zsh/bash) • Linux (zsh/bash) • Windows (WSL)
+macOS (zsh/bash) • Linux (zsh/bash) • Windows 10/11 (cmd.exe, PowerShell — native, no WSL)
 
 ## Under the Hood
 
@@ -369,6 +434,11 @@ Test the binary installer locally against a local directory or server:
 ```bash
 CLOTHER_RELEASE_BASE_URL=http://127.0.0.1:8000 \
   ./scripts/install.sh install
+```
+
+```powershell
+$env:CLOTHER_RELEASE_BASE_URL = 'http://127.0.0.1:8000'
+.\scripts\install.ps1 install
 ```
 
 ## Contributors
