@@ -94,14 +94,32 @@ This installs:
 
 ### PowerShell (Windows)
 
-Native Windows — no WSL, no Go toolchain. Run this in `cmd.exe` or PowerShell:
+Native Windows — no WSL, no Go toolchain. In PowerShell, two lines:
 
 ```powershell
+# 1. Install Claude Code CLI — skip this if `claude` is already on your PATH
+irm https://claude.ai/install.ps1 | iex
+
+# 2. Install Clother
+irm https://raw.githubusercontent.com/starbuck100/clother/main/scripts/install.ps1 | iex
+```
+
+From `cmd.exe` the same commands each need a PowerShell in front of them,
+because `irm` is a PowerShell cmdlet and cmd does not have one — typing `irm`
+into cmd gets you `'irm' is not recognized as an internal or external command`:
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"
+
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/starbuck100/clother/main/scripts/install.ps1 | iex"
 ```
 
+`-NoProfile` keeps your PowerShell profile out of the installer's way.
+`-ExecutionPolicy Bypass` lets the piped script run on machines whose policy
+would otherwise refuse it.
+
 ```bat
-:: 2. Start using it
+:: 3. Start using it
 clother-native                          :: Use your Claude Pro/Max/Team subscription
 clother-zai                             :: Z.AI (GLM-5.2)
 clother-zai --yolo                      :: Skip permission prompts
@@ -111,7 +129,7 @@ clother config                          :: Configure providers
 ```
 
 **Update:**
-```powershell
+```bat
 clother update          :: downloads and installs latest release
 ```
 
