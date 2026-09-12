@@ -114,8 +114,10 @@ func TestSyncClaudeShimResolvesToClother(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
+	// Large: on Windows the shim is a copy, which file identity cannot see, so
+	// SameInstallation falls back to comparing sizes.
 	execPath := filepath.Join(root, "clother-staging")
-	writeStub(t, execPath)
+	writeLargeStub(t, execPath)
 
 	catalog, err := providers.Load()
 	if err != nil {
@@ -235,9 +237,10 @@ func TestSyncSkipsCopyAndUsesAbsoluteLinks(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	// Simulate the Homebrew-managed binary (not in BinDir)
+	// Simulate the Homebrew-managed binary (not in BinDir). Large, because the
+	// shim is a copy there and SameInstallation falls back to size.
 	homebrewBin := filepath.Join(root, "homebrew", "bin", platform.BinaryName())
-	writeStub(t, homebrewBin)
+	writeLargeStub(t, homebrewBin)
 
 	catalog, err := providers.Load()
 	if err != nil {
@@ -264,12 +267,19 @@ func TestSyncSkipsCopyAndUsesAbsoluteLinks(t *testing.T) {
 	// differs by platform — an absolute symlink on Unix, a hardlink on Windows,
 	// where a symlink would need a privilege the installer does not have — so
 	// the assertion is the one that matters either way: same file.
-	names := append([]string{platform.ClaudeName()}, launcherNames("zai", "native", "or", "custom")...)
-	for _, name := range names {
+	for _, name := range launcherNames("zai", "native", "or", "custom") {
 		link := filepath.Join(paths.BinDir, name)
 		if !platform.SameFile(link, homebrewBin) {
 			t.Fatalf("%s does not resolve to %s", link, homebrewBin)
 		}
+	}
+
+	// The shim is the exception. It is a copy on Windows by design, so file
+	// identity cannot hold there; SameInstallation is the assertion that means
+	// "this is clother" on both platforms.
+	shim := filepath.Join(paths.BinDir, platform.ClaudeName())
+	if !platform.SameInstallation(shim, homebrewBin) {
+		t.Fatalf("%s does not resolve to %s", shim, homebrewBin)
 	}
 }
 
