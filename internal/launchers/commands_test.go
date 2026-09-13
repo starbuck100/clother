@@ -109,6 +109,22 @@ func TestGeneratedCommandsCallTheHelper(t *testing.T) {
 			t.Errorf("%s would stop for a permission prompt", filepath.Base(file.Path))
 		}
 	}
+
+	// The argument hint is a list of placeholders, so it starts with a bracket.
+	// Unquoted, that is a YAML flow sequence and the frontmatter stops being a
+	// document.
+	for _, file := range files {
+		body, err := os.ReadFile(file.Path)
+		if err != nil {
+			t.Fatalf("reading %s: %v", file.Path, err)
+		}
+		for _, line := range strings.Split(string(body), "\n") {
+			if strings.HasPrefix(line, "argument-hint:") && !strings.Contains(line, `"`) {
+				t.Errorf("%s has an unquoted argument hint: %s", filepath.Base(file.Path), line)
+			}
+		}
+	}
+	}
 }
 
 // A matching file is not rewritten. The distinctive past modification time is

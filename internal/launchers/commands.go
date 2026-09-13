@@ -172,7 +172,11 @@ func commandFrontmatter(description, argumentHint, clother string) string {
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "description: %s\n", description)
 	if argumentHint != "" {
-		fmt.Fprintf(&b, "argument-hint: %s\n", argumentHint)
+		// Quoted, because a hint starts with a bracket and an unquoted YAML
+		// value beginning with "[" is a flow sequence rather than a string. Two
+		// of them on one line is not a document at all, which would cost the
+		// whole frontmatter rather than the one field.
+		fmt.Fprintf(&b, "argument-hint: %q\n", argumentHint)
 	}
 	b.WriteString("disable-model-invocation: true\n")
 	fmt.Fprintf(&b, "allowed-tools: %s\n", allowedTools(clother))
