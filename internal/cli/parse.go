@@ -14,8 +14,11 @@ type Options struct {
 	// NoShim installs the provider launchers but leaves `claude` alone: the real
 	// Claude Code keeps its name and no shim is written.
 	NoShim bool
-	BinDir string
-	Format string
+	// NoCommands leaves the /clother:* slash commands unwritten, and leaves
+	// whatever a previous install wrote where it is.
+	NoCommands bool
+	BinDir     string
+	Format     string
 }
 
 type Parsed struct {

@@ -98,6 +98,11 @@ func specList() []OptionSpec {
 			Apply:       func(o *Options, _ string) { o.NoShim = true },
 		},
 		{
+			Name:        "--no-commands",
+			CommandOnly: true,
+			Apply:       func(o *Options, _ string) { o.NoCommands = true },
+		},
+		{
 			Name:        "--json",
 			CommandOnly: true,
 			Apply:       func(o *Options, _ string) { o.Format = "json" },
