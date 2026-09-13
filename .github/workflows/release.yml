@@ -19,6 +19,12 @@ jobs:
       - run: ./scripts/package-release.sh
       - uses: softprops/action-gh-release@v2
         with:
+          # A hyphen in the tag means a pre-release, which is what semver calls
+          # v3.2.0-rc1. It has to be stated: nothing infers it from the name, and
+          # an unmarked pre-release would become /releases/latest — which is the
+          # version `clother update` and the install one-liner hand to everybody
+          # installing this fork.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/clother_*.tar.gz
             dist/clother_*.zip

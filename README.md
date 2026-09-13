@@ -181,6 +181,24 @@ On Windows the shim is a copy rather than a hardlink. Claude Code's own updater
 rewrites `claude.exe` in place, and a hardlink would make that rewrite clobber
 `clother.exe` with it.
 
+### Installing a specific version, and updating
+
+Both installers take the newest release by default. `CLOTHER_VERSION` pins a tag instead, which is also how a pre-release is installed:
+
+```powershell
+$env:CLOTHER_VERSION = 'v3.2.0-rc1'
+irm https://raw.githubusercontent.com/starbuck100/clother/v3.2.0-rc1/scripts/install.ps1 | iex
+```
+
+```bash
+CLOTHER_VERSION=v3.2.0-rc1 \
+  curl -fsSL https://raw.githubusercontent.com/starbuck100/clother/v3.2.0-rc1/scripts/install.sh | bash
+```
+
+Re-running either script is also how you update: it installs the newest release over what is there, refreshing the launchers and the `/clother:*` commands along with the binary. Inside Clother, `clother update` does the same thing.
+
+A pre-release never becomes `latest`, so `clother update` and the plain one-liner keep offering the newest stable release until a version without a hyphen in its tag is published.
+
 ### Install Options
 
 By default, Clother installs launchers to:
