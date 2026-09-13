@@ -22,6 +22,10 @@ jobs:
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
             echo "::error::gofmt would rewrite: $unformatted"
+            # Print what it wants, not just which files. On a project without a
+            # local toolchain this gate is the only formatter feedback there is,
+            # and a bare file list turns a mechanical fix into guesswork.
+            gofmt -d $unformatted
             exit 1
           fi
       - run: bash -n clother.sh scripts/install.sh scripts/package-release.sh

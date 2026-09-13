@@ -90,9 +90,9 @@ func specList() []OptionSpec {
 			Apply: func(o *Options, _ string) { o.NoInput = true },
 		},
 		{
-			Name:    "--no-banner",
-			Launch:  true,
-			Apply:   func(o *Options, _ string) { o.NoBanner = true },
+			Name:   "--no-banner",
+			Launch: true,
+			Apply:  func(o *Options, _ string) { o.NoBanner = true },
 		},
 		{
 			Name:  "--no-shim",
