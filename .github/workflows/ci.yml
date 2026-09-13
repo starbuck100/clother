@@ -73,6 +73,12 @@ jobs:
           $env:CLOTHER_RELEASE_BASE_URL = "file:///$((Resolve-Path dist).Path -replace '\\','/')"
           $env:CLOTHER_INSTALL_MODE = 'release'
           $env:CLOTHER_SKIP_SELF_UPDATE = '1'
+          # The installer writes the /clother:* commands into the Claude
+          # configuration directory. That is pointed at a scratch directory here,
+          # both so this step cannot write into the runner's own home and so the
+          # assertions below can be made at all.
+          $config = Join-Path $env:RUNNER_TEMP 'claude-config'
+          $env:CLAUDE_CONFIG_DIR = $config
           ./scripts/install.ps1 -BinDir $bin
           if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
 
@@ -80,6 +86,16 @@ jobs:
             $path = Join-Path $bin $name
             if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
           }
+          $commands = Join-Path $config 'commands\clother'
+          foreach ($name in 'provider.md', 'config.md', 'status.md') {
+            if (-not (Test-Path -LiteralPath (Join-Path $commands $name))) { throw "$name was not written" }
+          }
+          # And nothing reached the real home, which is what the scratch
+          # directory above is for.
+          if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.claude\commands\clother')) {
+            throw "the slash commands were written to the real home"
+          }
+
           $clother = Join-Path $bin 'clother.exe'
           # The installed binary has to actually run from where the installer put
           # it. The provider launchers are not exercised here: they insist on a
@@ -94,3 +110,7 @@ jobs:
           foreach ($name in 'clother.exe', 'clother-zai.exe', 'claude.exe') {
             if (Test-Path -LiteralPath (Join-Path $bin $name)) { throw "$name survived uninstall" }
           }
+          foreach ($name in 'provider.md', 'config.md', 'status.md') {
+            if (Test-Path -LiteralPath (Join-Path $commands $name)) { throw "$name survived uninstall" }
+          }
+          if (Test-Path -LiteralPath $commands) { throw "the command directory survived uninstall" }
