@@ -43,6 +43,14 @@ func Invocation(argv0 string) (string, bool) {
 }
 
 func Resolve(profile string, catalog providers.Catalog, cfg *config.File) (Target, error) {
+	// A nil config means "nothing configured": no overrides, no aliases, no
+	// custom providers. Dereferencing it here would panic instead, and a nil
+	// config is a possible input elsewhere in this codebase — launchers.Sync
+	// checks for it explicitly.
+	if cfg == nil {
+		cfg = &config.File{}
+	}
+
 	if provider, ok := catalog.Get(profile); ok {
 		model := provider.DefaultModel
 		modelTiers := copyMap(provider.ModelTiers)

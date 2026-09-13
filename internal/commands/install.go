@@ -70,9 +70,11 @@ func runInstall(ctx context.Context, c Context) (int, error) {
 	if err := launchers.Sync(execPath, c.Paths, c.Catalog, c.Config, launchers.SyncOptions{
 		SkipCopy:          isHomebrew,
 		InstallClaudeShim: installShim,
+		CommandDir:        commandDir(c),
 	}); err != nil {
 		return 1, err
 	}
+	reportCommands(c)
 	for _, legacy := range []string{
 		filepath.Join(c.Paths.DataDir, "clother-full.sh"),
 		filepath.Join(c.Paths.DataDir, "banner"),
@@ -115,6 +117,40 @@ func runInstall(ctx context.Context, c Context) (int, error) {
 		c.Output.Warn("%s", pathHint(c.Paths.BinDir))
 	}
 	return 0, nil
+}
+
+// commandDir is where the /clother:* commands go, or an empty string when the
+// user asked for them not to be managed.
+//
+// runtime.ClaudeConfigDir refuses to answer from inside a clother session, where
+// the configuration directory is a per-session overlay: the files would be
+// deleted with it when the session ends.
+func commandDir(c Context) string {
+	if c.Options.NoCommands {
+		return ""
+	}
+	return runtime.ClaudeConfigDir()
+}
+
+// reportCommands says what happened to the slash commands.
+//
+// Writing into the user's own Claude configuration is worth announcing, and the
+// case where the directory could not be determined is worth a warning: the
+// difference between "not written" and "written elsewhere" is otherwise
+// invisible until a /clother:* command turns out not to exist.
+func reportCommands(c Context) {
+	if c.Options.NoCommands {
+		return
+	}
+	manifest, err := launchers.LoadManifest(c.Paths.ManifestFile)
+	if err != nil {
+		return
+	}
+	if len(manifest.Commands) == 0 {
+		c.Output.Warn("could not locate your Claude configuration, so the /clother:* commands were not written")
+		return
+	}
+	c.Output.Line("installed %d slash commands to %s", len(manifest.Commands), filepath.Dir(manifest.Commands[0].Path))
 }
 
 // pathHint tells the user how to get BinDir onto PATH in the idiom of their

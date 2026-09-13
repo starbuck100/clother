@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
+	"github.com/jolehuit/clother/internal/testutil"
 	"github.com/jolehuit/clother/internal/ui"
 )
 
@@ -56,18 +58,20 @@ func TestDefaultAliasNameProducesValidAliases(t *testing.T) {
 		if got != want {
 			t.Fatalf("defaultAliasName(%q) = %q, want %q", model, got, want)
 		}
-		if got != "" && !validName.MatchString(got) {
-			t.Fatalf("defaultAliasName(%q) = %q does not match validName", model, got)
+		if got != "" && !profiles.IsProviderName(got) {
+			t.Fatalf("defaultAliasName(%q) = %q is not a provider name", model, got)
 		}
 	}
 }
 
 func TestConfigBuiltinAllowsModelOverrideWithoutCatalogChoices(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("HOME", root)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(root, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, ".cache"))
+	// IsolateDirs sets CLOTHER_CONFIG_DIR and friends, which is what Detect
+	// reads first on every platform. The XDG variables alone are not enough: on
+	// Windows os.UserConfigDir reads %APPDATA%, so the configuration these tests
+	// write went to the real one of whoever ran them.
+	testutil.IsolateDirs(t, root)
+	testutil.SetHome(t, root)
 	t.Setenv("CLOTHER_BIN", filepath.Join(root, "bin"))
 
 	paths, err := config.Detect("")
@@ -115,10 +119,12 @@ func TestConfigBuiltinAllowsModelOverrideWithoutCatalogChoices(t *testing.T) {
 
 func TestConfigBuiltinLocalProviderStoresRemoteBaseURL(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("HOME", root)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(root, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, ".cache"))
+	// IsolateDirs sets CLOTHER_CONFIG_DIR and friends, which is what Detect
+	// reads first on every platform. The XDG variables alone are not enough: on
+	// Windows os.UserConfigDir reads %APPDATA%, so the configuration these tests
+	// write went to the real one of whoever ran them.
+	testutil.IsolateDirs(t, root)
+	testutil.SetHome(t, root)
 	t.Setenv("CLOTHER_BIN", filepath.Join(root, "bin"))
 
 	paths, err := config.Detect("")
