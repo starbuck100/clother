@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 	"github.com/jolehuit/clother/internal/ui"
 )
@@ -56,8 +57,8 @@ func TestDefaultAliasNameProducesValidAliases(t *testing.T) {
 		if got != want {
 			t.Fatalf("defaultAliasName(%q) = %q, want %q", model, got, want)
 		}
-		if got != "" && !validName.MatchString(got) {
-			t.Fatalf("defaultAliasName(%q) = %q does not match validName", model, got)
+		if got != "" && !profiles.IsProviderName(got) {
+			t.Fatalf("defaultAliasName(%q) = %q is not a provider name", model, got)
 		}
 	}
 }

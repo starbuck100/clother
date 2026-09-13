@@ -241,10 +241,12 @@ func TestSplitRefused(t *testing.T) {
 			miss: true,
 		},
 		{
-			name: "version is refused in launch mode",
+			// Version is not refused either, for the same reason as help: the
+			// router answers it before it can reach a launch.
+			name: "version is not a command-only option",
 			args: []string{"-V"},
-			want: "--version",
-			miss: true,
+			want: "",
+			miss: false,
 		},
 		{
 			name: "yes is refused in launch mode",
@@ -311,10 +313,11 @@ func TestSplitRefused(t *testing.T) {
 			miss: false,
 		},
 		{
-			// The first refusal wins, so the message names one option.
-			name: "first refused option is reported",
+			// The first refusal in the order the user wrote them wins, so the
+			// message names one option rather than listing them.
+			name: "the first refused option is reported",
 			args: []string{"--quiet", "--json"},
-			want: "--json",
+			want: "--quiet",
 			miss: true,
 		},
 	}
