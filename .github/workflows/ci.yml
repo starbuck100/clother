@@ -64,6 +64,19 @@ jobs:
       - name: Package a release
         shell: bash
         run: ./scripts/package-release.sh dist
+      - name: Publish the release artifacts for manual testing
+        # Only on a pull request: a branch pushed to main is a release, and the
+        # artifacts there are the ones the release workflow publishes. This is
+        # here so a change can be tried on a real machine without a local Go
+        # toolchain, which is how the parts CI cannot reach get checked at all.
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clother-windows
+          path: dist/clother_windows_*.zip
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Install from the packaged release
         shell: pwsh
         run: |
