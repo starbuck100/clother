@@ -12,10 +12,23 @@ import (
 	"github.com/jolehuit/clother/internal/platform"
 )
 
-// commandDirName is the subdirectory the generated files live in, and it is what
-// gives them their namespace: every / in a path under commands/ becomes a colon,
-// so provider.md inside this directory is /clother:provider.
-const commandDirName = "clother"
+// commandRootName is the directory Claude Code reads user-level commands from,
+// and commandDirName is the subdirectory within it that gives the generated
+// files their namespace: every / in a path under commands/ becomes a colon, so
+// provider.md inside the clother directory is /clother:provider.
+//
+// Both names are part of someone else's layout, not ours. The files are only
+// reachable as commands if they sit exactly here.
+const (
+	commandRootName = "commands"
+	commandDirName  = "clother"
+)
+
+// commandPath is where one generated file lives, given the Claude configuration
+// directory.
+func commandPath(configDir, name string) string {
+	return filepath.Join(configDir, commandRootName, commandDirName, name)
+}
 
 // commandTemplates are the files written into the user's Claude configuration
 // directory, in the order they are written.
@@ -68,7 +81,7 @@ func SyncCommands(dir string, opts CommandFileOptions) ([]GeneratedFile, error) 
 
 	files := make([]GeneratedFile, 0, len(commandTemplates))
 	for _, template := range commandTemplates {
-		path := filepath.Join(dir, commandDirName, template.name)
+		path := commandPath(dir, template.name)
 		body := template.body(clother)
 		if err := writeIfChanged(path, body); err != nil {
 			return files, err

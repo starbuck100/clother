@@ -48,10 +48,12 @@ func TestSyncCommandsWritesEveryFile(t *testing.T) {
 		if !strings.HasPrefix(string(body), "---\n") {
 			t.Errorf("%s does not begin with frontmatter:\n%s", file.Path, body)
 		}
-		// The directory is the namespace: a subdirectory of commands/ becomes a
-		// colon in the command name.
-		if got := filepath.Base(filepath.Dir(file.Path)); got != commandDirName {
-			t.Errorf("%s is not in the %s directory", file.Path, commandDirName)
+		// The whole layout matters, not just the last segment: the files are
+		// commands only if they sit under commands/, which is where Claude Code
+		// looks, and the directory below it is what makes them /clother:*.
+		want := filepath.Join(dir, commandRootName, commandDirName, filepath.Base(file.Path))
+		if file.Path != want {
+			t.Errorf("%s is not where Claude Code reads user commands from; want %s", file.Path, want)
 		}
 	}
 }
