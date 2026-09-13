@@ -43,6 +43,12 @@ func BuildEnv(target profiles.Target, secrets config.Secrets) ([]string, error) 
 	}
 	clearAnthropicEnv(envMap)
 
+	// Which provider this session runs under. The session helper reports it, and
+	// it cannot be recovered from anywhere else once Claude Code is running. It
+	// is not an ANTHROPIC_ variable, so it reaches the session through the
+	// process environment and never through the overlay's settings.json.
+	envMap["CLOTHER_PROFILE"] = target.Profile
+
 	if target.BaseURL != "" {
 		envMap["ANTHROPIC_BASE_URL"] = target.BaseURL
 	}
