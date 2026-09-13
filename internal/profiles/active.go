@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/jolehuit/clother/internal/config"
@@ -22,6 +23,17 @@ const DefaultProfile = "native"
 var aliases = map[string]string{
 	"claude":       DefaultProfile,
 	"subscription": DefaultProfile,
+}
+
+// AliasNames lists the alias spellings, so a near-miss hint can suggest one and
+// cannot offer a name that does not exist.
+func AliasNames() []string {
+	names := make([]string, 0, len(aliases))
+	for name := range aliases {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // ResolveAlias maps a user-typed provider name onto a catalog id, returning the

@@ -4,18 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/jolehuit/clother/internal/config"
 	"github.com/jolehuit/clother/internal/launchers"
+	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 	"github.com/jolehuit/clother/internal/runtime"
-)
-
-var (
-	validName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 )
 
 func runConfig(_ context.Context, c Context, args []string) (int, error) {
@@ -168,7 +164,7 @@ func configOpenRouter(c Context) (int, error) {
 		if err != nil {
 			return 1, err
 		}
-		if !validName.MatchString(name) {
+		if !profiles.IsProviderName(name) {
 			return 1, fmt.Errorf("invalid alias %q (use lowercase letters, digits, \"-\" or \"_\")", name)
 		}
 		c.Config.OpenRouterAliases[name] = model
@@ -181,7 +177,7 @@ func configCustom(c Context) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if !validName.MatchString(name) {
+	if !profiles.IsProviderName(name) {
 		return 1, fmt.Errorf("invalid provider name %q", name)
 	}
 
@@ -272,7 +268,7 @@ func defaultAliasName(model string) string {
 	// Model IDs may carry characters that are invalid in an alias (used as
 	// launcher name), e.g. the ":free"/":exacto" variant suffixes. Map anything
 	// outside the alias charset to "-" so the suggested default always passes
-	// validName.
+	// profiles.IsProviderName.
 	var b strings.Builder
 	for _, r := range model {
 		switch {
