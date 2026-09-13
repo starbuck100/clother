@@ -12,6 +12,7 @@ import (
 	"github.com/jolehuit/clother/internal/cli"
 	"github.com/jolehuit/clother/internal/config"
 	"github.com/jolehuit/clother/internal/providers"
+	"github.com/jolehuit/clother/internal/testutil"
 	"github.com/jolehuit/clother/internal/ui"
 )
 
@@ -21,10 +22,13 @@ func testSessionContext(t *testing.T) (Context, *bytes.Buffer) {
 	t.Helper()
 
 	root := t.TempDir()
-	t.Setenv("HOME", root)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(root, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, ".cache"))
+	// The same isolation the rest of this package's tests use. It sets
+	// CLOTHER_CONFIG_DIR and friends, which is what Detect reads first on every
+	// platform. The XDG variables alone are not enough: on Windows
+	// os.UserConfigDir reads %APPDATA%, so a test that sets only those writes
+	// into the real configuration of whoever runs it.
+	testutil.IsolateDirs(t, root)
+	testutil.SetHome(t, root)
 	t.Setenv("CLOTHER_BIN", filepath.Join(root, "bin"))
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("CLOTHER_PROFILE", "")
