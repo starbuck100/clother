@@ -5,7 +5,7 @@
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
     <a href="https://go.dev/"><img src="https://img.shields.io/badge/Language-Go-00ADD8.svg" alt="Go" /></a>
-    <a href="#platform-support"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg" alt="Platform macOS and Linux" /></a>
+    <a href="#platform-support"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg" alt="Platform macOS, Linux and Windows" /></a>
     <a href="https://github.com/jolehuit/clother/stargazers"><img src="https://img.shields.io/github/stars/jolehuit/clother?style=social" alt="GitHub stars" /></a>
   </p>
 </div>
@@ -16,6 +16,27 @@
   <img src="docs/demo-fast.gif" alt="Clother terminal demo" width="900" />
 </div>
 
+> [!IMPORTANT]
+> **This is the [`starbuck100` fork](https://github.com/starbuck100/clother) — it is where native Windows support lives.**
+>
+> Upstream [`jolehuit/clother`](https://github.com/jolehuit/clother) supports macOS and Linux only;
+> on Windows it expects WSL. This fork adds a native Windows build that runs in `cmd.exe` and
+> PowerShell with no WSL, no MSYS and no Go toolchain:
+>
+> - PowerShell installer — `scripts/install.ps1`
+> - `clother-*.exe` launchers created with NTFS hardlinks (copy fallback on FAT32 / network shares)
+> - Config overlays via NTFS junctions instead of symlinks — no admin rights, no Developer Mode
+> - A `claude.exe` shim that survives Claude Code's own in-place updater
+>
+> **Windows install (PowerShell):**
+>
+> ```powershell
+> irm https://raw.githubusercontent.com/starbuck100/clother/main/scripts/install.ps1 | iex
+> ```
+>
+> Everything else — providers, profiles, commands — is unchanged from upstream. See
+> [Platform Support](#platform-support) for the detail.
+
 ## Why Clother?
 
 Switching Claude Code providers usually means changing env vars, endpoints, models, and launcher scripts by hand.
@@ -24,6 +45,7 @@ Clother gives you one install and one command pattern across Claude, Z.AI, Kimi,
 ## Table of Contents
 
 - [Installation](#installation)
+  - [PowerShell (Windows)](#powershell-windows)
 - [Core Usage](#core-usage)
   - [Benchmarking](#benchmarking)
 - [Provider Reference](#provider-reference)
@@ -409,7 +431,24 @@ To configure it:
 
 ## Platform Support
 
-macOS (zsh/bash) • Linux (zsh/bash) • Windows 10/11 (cmd.exe, PowerShell — native, no WSL)
+| Platform | Support | Where |
+|----------|---------|-------|
+| macOS (zsh/bash) | Full | Upstream + this fork |
+| Linux (zsh/bash) | Full | Upstream + this fork |
+| Windows 10/11 (cmd.exe, PowerShell) | Full, native — no WSL, no MSYS | **This fork only** |
+| Windows under WSL | Works, but not required | Upstream + this fork |
+
+Native Windows support is the reason this fork exists. Clother itself is a single Go binary
+and always compiled for Windows; what upstream lacked was the runtime plumbing — symlinks,
+`/dev/tty`, the `claude` lookup, and Windows release assets. The fork supplies those in a
+per-OS `internal/platform` package, so Unix behaviour is untouched and upstream parity is
+maintained for every other platform. See [PowerShell (Windows)](#powershell-windows) for install
+and [The `claude` shim on Windows](#the-claude-shim-on-windows) for the one Windows-specific
+behaviour worth knowing about.
+
+Windows binaries are published on the [fork's releases](https://github.com/starbuck100/clother/releases)
+as `clother_windows_amd64.zip` and `clother_windows_arm64.zip`, and CI runs a test job on
+`windows-latest` so the Windows path does not drift silently.
 
 ## Under the Hood
 
