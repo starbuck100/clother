@@ -51,24 +51,25 @@ func TestSplitClotherOptions(t *testing.T) {
 			want: Options{Version: true},
 		},
 		{
-			// Shared with Claude Code, so it must reach Claude Code. Consuming
-			// it here would change what `clother --verbose` does today.
-			name: "shared option stays in rest",
+			// Claude Code has --verbose too, but an option written next to
+			// `clother` was meant for clother. Passing it through is what the
+			// `--` terminator is for.
+			name: "a name claude code shares is still consumed",
 			args: []string{"--verbose"},
-			rest: []string{"--verbose"},
-			want: Options{},
+			rest: nil,
+			want: Options{Verbose: true},
 		},
 		{
-			name: "shared short option stays in rest",
+			name: "the shared help name is consumed",
 			args: []string{"-h"},
-			rest: []string{"-h"},
-			want: Options{},
+			rest: nil,
+			want: Options{Help: true},
 		},
 		{
-			name: "shared debug stays in rest",
+			name: "debug is consumed and implies verbose",
 			args: []string{"--debug"},
-			rest: []string{"--debug"},
-			want: Options{},
+			rest: nil,
+			want: Options{Debug: true, Verbose: true},
 		},
 		{
 			name: "unknown option stays in rest",
@@ -265,7 +266,7 @@ func TestSplitRefused(t *testing.T) {
 		},
 		{
 			// Meaningful either way: it selects the bin directory the launcher
-			// will use, and it only controls clother's own banner.
+			// resolves providers from, and it only controls clother's banner.
 			name: "bin-dir is allowed in launch mode",
 			args: []string{"--bin-dir", "/tmp/bin"},
 			want: "",
@@ -278,8 +279,28 @@ func TestSplitRefused(t *testing.T) {
 			miss: false,
 		},
 		{
-			name: "quiet is allowed in launch mode",
+			name: "quiet is refused in launch mode",
 			args: []string{"-q"},
+			want: "--quiet",
+			miss: true,
+		},
+		{
+			name: "verbose is refused in launch mode",
+			args: []string{"-v"},
+			want: "--verbose",
+			miss: true,
+		},
+		{
+			name: "debug is refused in launch mode",
+			args: []string{"-d"},
+			want: "--debug",
+			miss: true,
+		},
+		{
+			// Help is not refused, because it never reaches a launch: the
+			// router answers it before it looks at anything else.
+			name: "help is not a command-only option",
+			args: []string{"--help"},
 			want: "",
 			miss: false,
 		},
