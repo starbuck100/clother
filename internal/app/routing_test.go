@@ -31,13 +31,25 @@ func (s stubSet) Candidates() []string {
 	return append(slices.Clone(s.commands), s.providers...)
 }
 
+// Gateway mimics the real one closely enough for the rules: it consumes exactly
+// one token, and a missing name is a usage error rather than a failure.
+func (s stubSet) Gateway(kind string, args []string) (string, []string, error) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return "", nil, &profiles.GatewayUsageError{Usage: "usage: clother-" + kind + " usage text"}
+	}
+	if kind == "or" {
+		return "or-" + args[0], args[1:], nil
+	}
+	return args[0], args[1:], nil
+}
+
 // testSet mirrors the shape of a real installation: the subscription, a couple
 // of catalog providers with fixed model lists, an OpenRouter profile whose model
 // is a free tag, and one configured alias.
 func testSet() stubSet {
 	return stubSet{
-		providers: []string{"native", "zai", "openrouter", "or-kimi"},
-		freeModel: []string{"openrouter", "or-kimi"},
+		providers: []string{"native", "zai", "openrouter", "or-kimi", "mine"},
+		freeModel: []string{"openrouter", "or-kimi", "mine"},
 		commands:  append(cli.CommandNames(), profiles.AliasNames()...),
 	}
 }
@@ -165,6 +177,27 @@ func TestDecide(t *testing.T) {
 			name: "a configured alias provider reads a tag too",
 			args: []string{"or-kimi", "moonshotai/kimi-k2.6"},
 			want: Decision{Mode: ModeLaunch, Provider: "or-kimi", Model: "moonshotai/kimi-k2.6"},
+		},
+		{
+			// The gateway spelling, which also works as its own launcher.
+			name: "the or gateway selects an alias",
+			args: []string{"or", "kimi"},
+			want: Decision{Mode: ModeLaunch, Provider: "or-kimi"},
+		},
+		{
+			name: "the or gateway takes a model tag and arguments",
+			args: []string{"or", "kimi", "moonshotai/kimi-k2.6", "--yolo"},
+			want: Decision{Mode: ModeLaunch, Provider: "or-kimi", Model: "moonshotai/kimi-k2.6", Args: []string{"--yolo"}},
+		},
+		{
+			name: "the custom gateway selects a configured provider",
+			args: []string{"custom", "mine"},
+			want: Decision{Mode: ModeLaunch, Provider: "mine"},
+		},
+		{
+			name: "the custom gateway takes arguments",
+			args: []string{"custom", "mine", "--resume", "abc"},
+			want: Decision{Mode: ModeLaunch, Provider: "mine", Args: []string{"--resume", "abc"}},
 		},
 		{
 			name: "a subcommand is still a subcommand",
@@ -316,6 +349,18 @@ func TestDecideErrors(t *testing.T) {
 			name: "a missing option value is reported",
 			args: []string{"--bin-dir"},
 			want: "--bin-dir requires a path",
+		},
+		{
+			name: "a gateway without a name prints usage",
+			args: []string{"or"},
+			want: "usage: clother-or",
+		},
+		{
+			// An option in the name's place is a missing name, not a lookup of
+			// an alias called "--yolo".
+			name: "a gateway followed by an option prints usage",
+			args: []string{"or", "--yolo"},
+			want: "usage: clother-or",
 		},
 	}
 

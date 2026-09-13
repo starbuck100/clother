@@ -53,6 +53,9 @@ type ProviderSet interface {
 	// Candidates lists the names a typo could have been aimed at: clother's own
 	// commands plus every configured provider.
 	Candidates() []string
+	// Gateway resolves an indirect provider name — `or <alias>`, `custom
+	// <name>` — and returns the arguments left after it.
+	Gateway(kind string, args []string) (profile string, rest []string, err error)
 }
 
 // Decide works out what an invocation means.
@@ -104,10 +107,20 @@ func Decide(args []string, set ProviderSet) (Decision, error) {
 		return Decision{}, fmt.Errorf("option %s applies to clother commands only; run clother help", refused)
 	}
 
+	// `or <alias>` and `custom <name>` name a provider indirectly, the same way
+	// the clother-or and clother-custom launchers do.
+	rest := split.Rest
+	if profiles.IsGateway(rest[0]) {
+		profile, remaining, err := set.Gateway(rest[0], rest[1:])
+		if err != nil {
+			return Decision{}, err
+		}
+		return finishLaunch(Decision{Mode: ModeLaunch, Provider: profile, Options: split.Options}, remaining, set), nil
+	}
+
 	// The alias is resolved before the provider is looked up, not after: `claude`
 	// is not a provider id, so asking the set about the raw token would send the
 	// subscription's own name to Claude Code as a prompt.
-	rest := split.Rest
 	provider := profiles.ResolveAlias(rest[0])
 	if !set.IsProvider(provider) {
 		if hint, ok := cli.NearMiss(rest[0], set.Candidates()); ok {
@@ -118,18 +131,20 @@ func Decide(args []string, set ProviderSet) (Decision, error) {
 		return Decision{Mode: ModeLaunch, Args: rest, Options: split.Options}, nil
 	}
 
-	decision := Decision{Mode: ModeLaunch, Provider: provider, Options: split.Options}
-	rest = rest[1:]
+	return finishLaunch(Decision{Mode: ModeLaunch, Provider: provider, Options: split.Options}, rest[1:], set), nil
+}
 
-	// A model tag is read directly after the provider, and only for a provider
-	// whose model is a free tag. For one with a fixed model list the token is
-	// left alone, so `clother zai src/main.go` is a prompt and not a model named
-	// after a file.
-	if len(rest) > 0 && set.IsModelTagProvider(provider) && profiles.IsModelTag(rest[0]) {
+// finishLaunch reads the optional model tag and leaves the rest for Claude Code.
+//
+// A tag is read only for a provider whose model is a free tag. For one with a
+// fixed model list there is no tag to name, so the token is left alone and
+// `clother zai src/main.go` stays a prompt rather than becoming a model named
+// after a file.
+func finishLaunch(decision Decision, rest []string, set ProviderSet) Decision {
+	if len(rest) > 0 && set.IsModelTagProvider(decision.Provider) && profiles.IsModelTag(rest[0]) {
 		decision.Model = rest[0]
 		rest = rest[1:]
 	}
-
 	decision.Args = rest
-	return decision, nil
+	return decision
 }
