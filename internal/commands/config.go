@@ -55,9 +55,8 @@ func chooseProvider(c Context) (string, error) {
 			index++
 		}
 	}
-	fmt.Fprintf(c.Output.Stdout, "  %2d. %-14s %s\n", index, "openrouter", "100+ models")
-	choices[index] = "openrouter"
-	index++
+	// OpenRouter used to be appended here by hand, because it was not in the
+	// catalog. It is now, so listing it again would offer it twice.
 	fmt.Fprintf(c.Output.Stdout, "  %2d. %-14s %s\n", index, "custom", "Anthropic-compatible endpoint")
 	choices[index] = "custom"
 

@@ -77,7 +77,9 @@ func ShowFull(w io.Writer, catalog providers.Catalog) {
 		}
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Advanced:")
-	fmt.Fprintln(w, "    openrouter   100+ models via native API")
+	// OpenRouter is a catalog provider now and is listed with the others above.
+	// The heading says so rather than repeating "Advanced", which is the name of
+	// the catalog category it sits in.
+	fmt.Fprintln(w, "Beyond the catalog:")
 	fmt.Fprintln(w, "    custom       Anthropic-compatible endpoint")
 }
