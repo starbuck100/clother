@@ -27,6 +27,10 @@ func Launch(ctx context.Context, paths config.Paths, target profiles.Target, arg
 	args = NormalizeClaudeArgs(args)
 	var cleanup func()
 	var err error
+	env, err = PrepareOpenRouterEnv(ctx, paths.CacheDir, target, args, env)
+	if err != nil {
+		return 1, err
+	}
 	env, cleanup, err = PrepareClaudeConfigOverlay(target, args, env)
 	if err != nil {
 		return 1, err

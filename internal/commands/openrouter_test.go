@@ -17,8 +17,9 @@ import (
 
 func TestConfigOpenRouterDefaultAndAliases(t *testing.T) {
 	c, _ := testSessionContext(t)
+	setTestOpenRouterCatalog(t, c)
 	c.Prompt = ui.NewPrompter(strings.NewReader("test-key\nvendor/default:free\nvendor/other\nother\n\n"), io.Discard)
-	code, err := configOpenRouter(c)
+	code, err := configOpenRouter(context.Background(), c)
 	if err != nil || code != 0 {
 		t.Fatalf("configure: code=%d err=%v", code, err)
 	}
@@ -34,18 +35,17 @@ func TestConfigOpenRouterDefaultAndAliases(t *testing.T) {
 		t.Fatal("key not persisted")
 	}
 	c.Prompt = ui.NewPrompter(strings.NewReader("\n\n\n"), io.Discard)
-	if code, err := configOpenRouter(c); err != nil || code != 0 {
+	if code, err := configOpenRouter(context.Background(), c); err != nil || code != 0 {
 		t.Fatalf("keep defaults: code=%d err=%v", code, err)
 	}
 	if c.Config.ProviderOverrides["openrouter"].Model != "vendor/default:free" {
 		t.Fatal("reconfiguration lost the default")
 	}
 	c.Prompt = ui.NewPrompter(strings.NewReader("\n1\n\n"), io.Discard)
-	if code, err := configOpenRouter(c); err != nil || code != 0 {
+	if code, err := configOpenRouter(context.Background(), c); err != nil || code != 0 {
 		t.Fatalf("numeric choice: code=%d err=%v", code, err)
 	}
-	provider, _ := c.Catalog.Get("openrouter")
-	if c.Config.ProviderOverrides["openrouter"].Model != provider.ModelChoices[0].ID {
+	if c.Config.ProviderOverrides["openrouter"].Model != "vendor/default:free" {
 		t.Fatal("numeric choice not resolved")
 	}
 }
@@ -54,8 +54,9 @@ func TestConfigOpenRouterRejectsIncompleteInput(t *testing.T) {
 	for _, input := range []string{"\n", "test-key\ninvalid\n", "test-key\nvendor/model\ninvalid\n"} {
 		t.Run(input, func(t *testing.T) {
 			c, _ := testSessionContext(t)
+			setTestOpenRouterCatalog(t, c)
 			c.Prompt = ui.NewPrompter(strings.NewReader(input), io.Discard)
-			if code, err := configOpenRouter(c); code == 0 || err == nil {
+			if code, err := configOpenRouter(context.Background(), c); code == 0 || err == nil {
 				t.Fatal("expected invalid configuration to fail")
 			}
 			if _, err := os.Stat(c.Paths.ConfigFile); !os.IsNotExist(err) {
@@ -111,4 +112,20 @@ func TestRunTestOpenRouterFailureExitCode(t *testing.T) {
 	if err != nil || code != 1 || !strings.Contains(out.String(), "OPENROUTER_API_KEY not configured") {
 		t.Fatalf("code=%d err=%v output=%s", code, err, out.String())
 	}
+}
+
+func setTestOpenRouterCatalog(t *testing.T, c Context) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/models" {
+			t.Error("wrong model catalog URL")
+		}
+		fmt.Fprint(w, `{"data":[
+		{"id":"vendor/default:free","context_length":32768,"pricing":{"prompt":"0","completion":"0"},"supported_parameters":["tools"],"architecture":{"input_modalities":["text"],"output_modalities":["text"]}},
+		{"id":"vendor/other","context_length":32768,"pricing":{"prompt":"0.01","completion":"0.01"},"supported_parameters":["tools"],"architecture":{"input_modalities":["text"],"output_modalities":["text"]}},
+		{"id":"vendor/model","context_length":32768,"pricing":{"prompt":"0","completion":"0"},"supported_parameters":["tools"],"architecture":{"input_modalities":["text"],"output_modalities":["text"]}}
+		]}`)
+	}))
+	t.Cleanup(server.Close)
+	c.Config.ProviderOverrides["openrouter"] = config.ProviderOverride{BaseURL: server.URL + "/api"}
 }

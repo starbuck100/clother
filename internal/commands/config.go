@@ -9,12 +9,13 @@ import (
 
 	"github.com/jolehuit/clother/internal/config"
 	"github.com/jolehuit/clother/internal/launchers"
+	"github.com/jolehuit/clother/internal/openrouter"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 	"github.com/jolehuit/clother/internal/runtime"
 )
 
-func runConfig(_ context.Context, c Context, args []string) (int, error) {
+func runConfig(ctx context.Context, c Context, args []string) (int, error) {
 	providerID := ""
 	if len(args) > 0 {
 		providerID = args[0]
@@ -28,7 +29,7 @@ func runConfig(_ context.Context, c Context, args []string) (int, error) {
 
 	switch providerID {
 	case "openrouter":
-		return configOpenRouter(c)
+		return configOpenRouter(ctx, c)
 	case "custom":
 		return configCustom(c)
 	default:
@@ -140,7 +141,7 @@ func configBuiltin(c Context, provider providers.Provider) (int, error) {
 	return persistConfig(c)
 }
 
-func configOpenRouter(c Context) (int, error) {
+func configOpenRouter(ctx context.Context, c Context) (int, error) {
 	current := c.Secrets["OPENROUTER_API_KEY"]
 	if current != "" {
 		fmt.Fprintf(c.Output.Stdout, "Current key: %s\n", config.MaskSecret(current))
@@ -164,31 +165,51 @@ func configOpenRouter(c Context) (int, error) {
 	if override.Model != "" {
 		defaultModel = override.Model
 	}
-	fmt.Fprintln(c.Output.Stdout, "Default model for clother-openrouter (number or vendor/model):")
-	for idx, choice := range provider.ModelChoices {
-		fmt.Fprintf(c.Output.Stdout, "  %d. %-24s %s\n", idx+1, choice.ID, choice.Description)
+	baseURL := provider.BaseURL
+	if override.BaseURL != "" {
+		baseURL = override.BaseURL
 	}
+	fmt.Fprintln(c.Output.Stdout, "Fetching current OpenRouter models...")
+	catalog, err := openrouter.Load(ctx, baseURL, c.Paths.CacheDir, true)
+	if err != nil {
+		return 1, err
+	}
+	choices := []providers.ModelChoice{}
+	fmt.Fprintln(c.Output.Stdout, "Currently free models with text and tool support:")
+	for idx, choice := range catalog.FreeModels() {
+		output := fmt.Sprint(choice.TopProvider.MaxCompletionTokens)
+		if choice.TopProvider.MaxCompletionTokens <= 0 {
+			output = "unspecified (conservative limit at launch)"
+		}
+		fmt.Fprintf(c.Output.Stdout, "  %d. %s | context: %d | max output: %s\n", idx+1, choice.ID, choice.ContextLimit(), output)
+		choices = append(choices, providers.ModelChoice{ID: choice.ID})
+	}
+	if len(choices) == 0 {
+		fmt.Fprintln(c.Output.Stdout, "  No compatible free models currently advertised.")
+	}
+	fmt.Fprintln(c.Output.Stdout, "Choose a number or enter any catalog model ID (paid models allowed). Free models still have provider rate limits.")
 	model, err := c.Prompt.Prompt("Default model", defaultModel)
 	if err != nil {
 		return 1, err
 	}
-	model = resolveModelChoice(model, provider.ModelChoices)
-	if !profiles.IsModelTag(model) {
-		return 1, fmt.Errorf("invalid OpenRouter model %q (use vendor/model)", model)
+	model = resolveModelChoice(model, choices)
+	if err := validateOpenRouterSelection(catalog, model); err != nil {
+		return 1, err
 	}
 	override.Model = model
 	c.Config.ProviderOverrides["openrouter"] = override
 	fmt.Fprintln(c.Output.Stdout, "Optional model aliases for clother-or <alias>:")
 	for {
-		model, err := c.Prompt.Prompt("Model ID (empty to stop)", "")
+		model, err := c.Prompt.Prompt("Model number or ID (empty to stop)", "")
 		if err != nil {
 			return 1, err
 		}
 		if strings.TrimSpace(model) == "" {
 			break
 		}
-		if !profiles.IsModelTag(model) {
-			return 1, fmt.Errorf("invalid OpenRouter model %q (use vendor/model)", model)
+		model = resolveModelChoice(model, choices)
+		if err := validateOpenRouterSelection(catalog, model); err != nil {
+			return 1, err
 		}
 		name, err := c.Prompt.Prompt("Alias", defaultAliasName(model))
 		if err != nil {
@@ -323,4 +344,15 @@ func resolveModelChoice(answer string, choices []providers.ModelChoice) string {
 		}
 	}
 	return answer
+}
+
+func validateOpenRouterSelection(catalog openrouter.Catalog, id string) error {
+	if !profiles.IsModelTag(id) {
+		return fmt.Errorf("invalid OpenRouter model %q (use vendor/model)", id)
+	}
+	model, err := catalog.Find(id)
+	if err != nil {
+		return err
+	}
+	return model.Validate()
 }

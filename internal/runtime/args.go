@@ -24,17 +24,18 @@ func NormalizeClaudeArgs(args []string) []string {
 }
 
 func ModelOverride(args []string) string {
+	model := ""
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if arg == "--model" {
-			if i+1 >= len(args) {
-				return ""
-			}
-			return strings.TrimSpace(args[i+1])
+		if arg == "--" {
+			break
 		}
-		if strings.HasPrefix(arg, "--model=") {
-			return strings.TrimSpace(strings.TrimPrefix(arg, "--model="))
+		if arg == "--model" && i+1 < len(args) {
+			i++
+			model = strings.TrimSpace(args[i])
+		} else if strings.HasPrefix(arg, "--model=") {
+			model = strings.TrimSpace(strings.TrimPrefix(arg, "--model="))
 		}
 	}
-	return ""
+	return model
 }
