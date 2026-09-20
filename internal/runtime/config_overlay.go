@@ -23,6 +23,7 @@ func PrepareClaudeConfigOverlay(target profiles.Target, args []string, env []str
 	if overrideModel != "" {
 		envMap["ANTHROPIC_MODEL"] = overrideModel
 		for _, key := range []string{
+			"ANTHROPIC_DEFAULT_FABLE_MODEL",
 			"ANTHROPIC_DEFAULT_HAIKU_MODEL",
 			"ANTHROPIC_DEFAULT_SONNET_MODEL",
 			"ANTHROPIC_DEFAULT_OPUS_MODEL",

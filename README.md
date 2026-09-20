@@ -47,6 +47,9 @@ Clother gives you one install and one command pattern across Claude, Z.AI, Kimi,
 - [Installation](#installation)
   - [PowerShell (Windows)](#powershell-windows)
 - [Core Usage](#core-usage)
+  - [Launching Claude Code](#launching-claude-code)
+  - [Switching provider inside a session](#switching-provider-inside-a-session)
+  - [Commands](#commands)
   - [Benchmarking](#benchmarking)
 - [Provider Reference](#provider-reference)
 - [Troubleshooting](#troubleshooting)
@@ -178,6 +181,24 @@ On Windows the shim is a copy rather than a hardlink. Claude Code's own updater
 rewrites `claude.exe` in place, and a hardlink would make that rewrite clobber
 `clother.exe` with it.
 
+### Installing a specific version, and updating
+
+Both installers take the newest release by default. `CLOTHER_VERSION` pins a tag instead, which is also how a pre-release is installed:
+
+```powershell
+$env:CLOTHER_VERSION = 'v3.2.0-rc1'
+irm https://raw.githubusercontent.com/starbuck100/clother/v3.2.0-rc1/scripts/install.ps1 | iex
+```
+
+```bash
+CLOTHER_VERSION=v3.2.0-rc1 \
+  curl -fsSL https://raw.githubusercontent.com/starbuck100/clother/v3.2.0-rc1/scripts/install.sh | bash
+```
+
+Re-running either script is also how you update: it installs the newest release over what is there, refreshing the launchers and the `/clother:*` commands along with the binary. Inside Clother, `clother update` does the same thing.
+
+A pre-release never becomes `latest`, so `clother update` and the plain one-liner keep offering the newest stable release until a version without a hyphen in its tag is published.
+
 ### Install Options
 
 By default, Clother installs launchers to:
@@ -212,6 +233,42 @@ $env:CLOTHER_BIN = "$env:USERPROFILE\bin"
 Clother keeps `claude --resume ...` working with Clother features after install.
 
 ## Core Usage
+
+### Launching Claude Code
+
+`clother` on its own starts Claude Code under the provider you last chose:
+
+```bash
+clother                                   # the remembered provider, native on first run
+clother --yolo                            # same, skipping permission prompts
+clother --resume <id>                     # same, continuing a session
+clother zai                               # switch to Z.AI, and remember it
+clother zai --model glm-4.7               # ... with a different model
+clother openrouter moonshotai/kimi-k2.6   # any OpenRouter model, by its tag
+clother fix the bug in src/foo.go         # no provider named: the words go to Claude Code
+clother -- --verbose                      # after --, everything belongs to Claude Code
+```
+
+The choice is remembered in `clother`'s own configuration (`clother status` prints it, `clother list` marks it with `(active)`). The `clother-<provider>` launchers still work exactly as they always have, and do not change what is remembered.
+
+Everything after the provider name goes to Claude Code unchanged. Where the two readings collide — `clother zai` against `clother fix the bug` — the provider name wins, because `clother zai --resume <id>` has to work; `--` is how you say "this is Claude Code's". A mistyped command is reported with a suggestion instead of being passed on as a prompt.
+
+For OpenRouter any `vendor/model` tag is accepted, so the shortlist in `clother info openrouter` is a convenience and not a limit. A model tag is only read for providers whose models are not a fixed list — `clother zai src/main.go` stays a prompt.
+
+### Switching provider inside a session
+
+Claude Code reads its endpoint and credentials once, at startup, so a session that is already running cannot be moved to another provider. Inside a session, `/clother:provider` therefore remembers the choice and prints the line that continues the same session under it:
+
+```
+/clother:provider zai       switch, and print how to continue
+/clother:provider           what is remembered, and where this session is running
+/clother:config             what the current provider resolves to, and how to change it
+/clother:status             installation state
+```
+
+Run the printed `clother <provider> --resume <id>` line in your shell and the conversation continues on the new provider.
+
+`clother install` writes those three commands into your Claude configuration directory, under `commands/clother/` — that directory is what namespaces them as `/clother:*`. They work in any Claude Code session, including ones Clother did not start, and `clother uninstall` removes them again. `clother install --no-commands` skips writing them.
 
 ### Commands
 
@@ -305,13 +362,34 @@ single launch, then restores the original session file afterwards.
 ### OpenRouter (100+ Models)
 
 ```bash
-clother config openrouter               # Set API key + add models
+clother config openrouter               # Set API key, default model, optional aliases
+clother-openrouter --yolo               # Launch with the configured default model
+clother-openrouter --yolo --model vendor/model
+clother test openrouter                 # Check authentication without inference charges
 # Example: alias moonshotai/kimi-k2.5 as kimi-k25
 clother-or kimi-k25                     # Works on every install
 clother-or-kimi-k25                     # Per-alias shortcut (curl installs)
 ```
 
-`clother-or <alias>` works on every install. curl installs additionally get a
+`clother-openrouter` works without creating an alias. Configuration accepts a
+model number from the shortlist or any `vendor/model` ID, including variants
+such as `:free`. Press Enter to keep the saved key and default model.
+`--model` overrides the model for this launch; `--yolo` is forwarded as
+`--dangerously-skip-permissions`.
+
+Clother uses OpenRouter's [Anthropic-compatible endpoint](https://openrouter.ai/docs/cookbook/coding-agents/claude-code-integration),
+with bearer authentication and an explicitly empty Anthropic API key. Main,
+Fable, Haiku, Sonnet, Opus, small/fast and subagent roles use the selected model.
+Claude Code compatibility depends on the model and upstream provider; OpenRouter
+only guarantees full compatibility with Anthropic's first-party provider.
+
+`clother test openrouter` checks the configured key with
+[`GET /api/v1/key`](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key).
+Missing keys, authentication failures and invalid responses return a nonzero
+exit code. This does not prove model availability or inference; use
+`clother-openrouter --print "Reply with OK"` for a real, billable model request.
+
+`clother-or <alias>` works on every install. curl and Windows installs additionally get a
 `clother-or-<alias>` symlink per alias when you run `clother config`; Homebrew
 installs skip per-alias symlinks (the formula owns its bin directory), so use
 the `clother-or <alias>` form there.

@@ -25,29 +25,61 @@ type CustomProvider struct {
 	DefaultModel string `json:"default_model,omitempty"`
 }
 
+// Active is the provider the bare `clother` invocation launches, together with
+// the model tag chosen for it.
+//
+// Profile and model deliberately share one struct instead of being two fields on
+// File: a model tag only means anything for the provider it was chosen for, and
+// storing them apart would let the residue of one choice outlive the provider it
+// belongs to.
+type Active struct {
+	Profile string `json:"profile,omitempty"`
+	Model   string `json:"model,omitempty"`
+}
+
 type File struct {
 	Version           int                         `json:"version"`
 	ProviderOverrides map[string]ProviderOverride `json:"provider_overrides,omitempty"`
 	OpenRouterAliases map[string]string           `json:"openrouter_aliases,omitempty"`
 	CustomProviders   map[string]CustomProvider   `json:"custom_providers,omitempty"`
+
+	// Active is the provider the bare `clother` invocation launches. Nil means
+	// nothing has been chosen yet, which is not the same as having chosen
+	// native: the first bare launch reports itself before it settles on the
+	// default, and only then does this become set.
+	Active *Active `json:"active,omitempty"`
 }
 
 func LoadConfig(path string) (*File, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return decodeConfig(nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return decodeConfig(data)
+}
+
+// decodeConfig parses a config document and fills in what an absent, empty or
+// older one is missing.
+//
+// It is split out from LoadConfig because the active-provider writer decodes the
+// same document from a buffer it read itself, and the defaults should be spelled
+// once rather than twice. A zero-length document yields the defaults: an empty
+// config.json is what a truncated write leaves behind, and it has nothing in it
+// to preserve, so refusing every command over it would help nobody.
+func decodeConfig(data []byte) (*File, error) {
 	cfg := &File{
 		Version:           1,
 		ProviderOverrides: map[string]ProviderOverride{},
 		OpenRouterAliases: map[string]string{},
 		CustomProviders:   map[string]CustomProvider{},
 	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return cfg, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, err
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, cfg); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.ProviderOverrides == nil {
 		cfg.ProviderOverrides = map[string]ProviderOverride{}

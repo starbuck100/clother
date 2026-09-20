@@ -11,6 +11,7 @@ DIST_DIR="$(cd "$DIST_DIR" && pwd)"
 cd "$ROOT_DIR"
 DEFAULT_VERSION="$(sed -n 's/^var Value = "\(.*\)"$/\1/p' "$ROOT_DIR/internal/version/version.go" | head -1)"
 VERSION="${VERSION:-${GITHUB_REF_NAME:-${DEFAULT_VERSION:-dev}}}"
+VERSION="${VERSION#v}"
 # The repository the built binaries fetch their own updates from. In CI this is
 # the repository the workflow runs in, so a fork of the fork stays self-contained.
 UPDATE_REPO="${GITHUB_REPOSITORY:-starbuck100/clother}"

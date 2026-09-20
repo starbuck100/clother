@@ -50,6 +50,21 @@ func runUninstall(_ context.Context, c Context) (int, error) {
 		_ = os.Remove(filepath.Join(c.Paths.BinDir, name))
 	}
 
+	// The generated slash commands live in the user's Claude configuration,
+	// which is not one of the directories this uninstall removes, so they are
+	// removed by name and verified by hash. A file the user has edited since it
+	// was written is kept and reported rather than deleted as though it were
+	// ours.
+	if len(manifest.Commands) > 0 {
+		removed, kept := launchers.RemoveCommands(manifest.Commands)
+		if len(removed) > 0 {
+			c.Output.Success("removed %d slash commands", len(removed))
+		}
+		for _, path := range kept {
+			c.Output.Warn("%s was changed after it was installed, so it was left in place", path)
+		}
+	}
+
 	// The binary is removed last, and after the shim, because it is what the
 	// shim is compared against to prove ownership. On Windows it is also the
 	// file that is currently running.

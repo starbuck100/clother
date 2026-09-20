@@ -79,6 +79,9 @@ func TestPrepareClaudeConfigOverlayMirrorsConfigAndPinsModel(t *testing.T) {
 	if settingsEnv["CLAUDE_CODE_SUBAGENT_MODEL"] != "glm-5" {
 		t.Fatalf("patched CLAUDE_CODE_SUBAGENT_MODEL = %v, want glm-5", settingsEnv["CLAUDE_CODE_SUBAGENT_MODEL"])
 	}
+	if settingsEnv["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "glm-5" {
+		t.Fatal("Fable model did not follow the model override")
+	}
 	// Mirrored, not copied. On Unix that is a symlink, on Windows a junction for
 	// the directory and a hardlink for the file; what has to hold either way is
 	// that the overlay entry *is* the original.

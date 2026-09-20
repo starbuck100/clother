@@ -43,6 +43,12 @@ func BuildEnv(target profiles.Target, secrets config.Secrets) ([]string, error) 
 	}
 	clearAnthropicEnv(envMap)
 
+	// Which provider this session runs under. The session helper reports it, and
+	// it cannot be recovered from anywhere else once Claude Code is running. It
+	// is not an ANTHROPIC_ variable, so it reaches the session through the
+	// process environment and never through the overlay's settings.json.
+	envMap["CLOTHER_PROFILE"] = target.Profile
+
 	if target.BaseURL != "" {
 		envMap["ANTHROPIC_BASE_URL"] = target.BaseURL
 	}
@@ -62,6 +68,18 @@ func BuildEnv(target profiles.Target, secrets config.Secrets) ([]string, error) 
 		}
 	}
 
+	if target.Family == providers.FamilyOpenRouter {
+		model := target.Model
+		if model == "" {
+			model = target.ModelTiers["sonnet"]
+		}
+		if model != "" {
+			envMap["ANTHROPIC_DEFAULT_FABLE_MODEL"] = model
+			envMap["ANTHROPIC_SMALL_FAST_MODEL"] = model
+			envMap["CLAUDE_CODE_SUBAGENT_MODEL"] = model
+		}
+	}
+
 	switch target.AuthMode {
 	case providers.AuthNone:
 	case providers.AuthLiteral:
@@ -70,6 +88,9 @@ func BuildEnv(target profiles.Target, secrets config.Secrets) ([]string, error) 
 	case providers.AuthSecret:
 		value := secrets[target.SecretKey]
 		if value == "" {
+			if target.Family == providers.FamilyOpenRouter {
+				return nil, fmt.Errorf("OPENROUTER_API_KEY not configured; run clother config openrouter")
+			}
 			return nil, fmt.Errorf("%s not configured", target.SecretKey)
 		}
 		envMap["ANTHROPIC_AUTH_TOKEN"] = value

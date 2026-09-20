@@ -35,6 +35,9 @@ func TestBuildEnvForOpenRouter(t *testing.T) {
 		"ANTHROPIC_AUTH_TOKEN=sk-openrouter",
 		"ANTHROPIC_API_KEY=",
 		"ANTHROPIC_DEFAULT_OPUS_MODEL=moonshotai/kimi-k2.5",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL=moonshotai/kimi-k2.5",
+		"CLAUDE_CODE_SUBAGENT_MODEL=moonshotai/kimi-k2.5",
+		"ANTHROPIC_SMALL_FAST_MODEL=moonshotai/kimi-k2.5",
 	} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("env missing %q:\n%s", expected, text)

@@ -22,6 +22,10 @@ jobs:
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
             echo "::error::gofmt would rewrite: $unformatted"
+            # Print what it wants, not just which files. On a project without a
+            # local toolchain this gate is the only formatter feedback there is,
+            # and a bare file list turns a mechanical fix into guesswork.
+            gofmt -d $unformatted
             exit 1
           fi
       - run: bash -n clother.sh scripts/install.sh scripts/package-release.sh
@@ -59,7 +63,28 @@ jobs:
           if ($failed) { exit 1 }
       - name: Package a release
         shell: bash
+        env:
+          VERSION: 3.2.0-ci.${{ github.sha }}
         run: ./scripts/package-release.sh dist
+      - name: Publish the release artifacts for manual testing
+        # Only on a pull request: a branch pushed to main is a release, and the
+        # artifacts there are the ones the release workflow publishes. This is
+        # here so a change can be tried on a real machine without a local Go
+        # toolchain, which is how the parts CI cannot reach get checked at all.
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clother-windows
+          path: dist/clother_windows_*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify OpenRouter launcher and yolo forwarding
+        shell: pwsh
+        run: |
+          Expand-Archive dist/clother_windows_amd64.zip -DestinationPath "$env:RUNNER_TEMP/openrouter-release"
+          ./scripts/test-openrouter.ps1 -BinaryPath "$env:RUNNER_TEMP/openrouter-release/clother.exe"
+
       - name: Install from the packaged release
         shell: pwsh
         run: |
@@ -69,13 +94,29 @@ jobs:
           $env:CLOTHER_RELEASE_BASE_URL = "file:///$((Resolve-Path dist).Path -replace '\\','/')"
           $env:CLOTHER_INSTALL_MODE = 'release'
           $env:CLOTHER_SKIP_SELF_UPDATE = '1'
+          # The installer writes the /clother:* commands into the Claude
+          # configuration directory. That is pointed at a scratch directory here,
+          # both so this step cannot write into the runner's own home and so the
+          # assertions below can be made at all.
+          $config = Join-Path $env:RUNNER_TEMP 'claude-config'
+          $env:CLAUDE_CONFIG_DIR = $config
           ./scripts/install.ps1 -BinDir $bin
           if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
 
-          foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-or.exe', 'claude.exe') {
+          foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-openrouter.exe', 'clother-or.exe', 'claude.exe') {
             $path = Join-Path $bin $name
             if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
           }
+          $commands = Join-Path $config 'commands\clother'
+          foreach ($name in 'provider.md', 'config.md', 'status.md') {
+            if (-not (Test-Path -LiteralPath (Join-Path $commands $name))) { throw "$name was not written" }
+          }
+          # And nothing reached the real home, which is what the scratch
+          # directory above is for.
+          if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.claude\commands\clother')) {
+            throw "the slash commands were written to the real home"
+          }
+
           $clother = Join-Path $bin 'clother.exe'
           # The installed binary has to actually run from where the installer put
           # it. The provider launchers are not exercised here: they insist on a
@@ -90,3 +131,7 @@ jobs:
           foreach ($name in 'clother.exe', 'clother-zai.exe', 'claude.exe') {
             if (Test-Path -LiteralPath (Join-Path $bin $name)) { throw "$name survived uninstall" }
           }
+          foreach ($name in 'provider.md', 'config.md', 'status.md') {
+            if (Test-Path -LiteralPath (Join-Path $commands $name)) { throw "$name survived uninstall" }
+          }
+          if (Test-Path -LiteralPath $commands) { throw "the command directory survived uninstall" }

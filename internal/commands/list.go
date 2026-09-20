@@ -19,6 +19,7 @@ func runList(_ context.Context, c Context) (int, error) {
 			Name       string `json:"name"`
 			Command    string `json:"command"`
 			Configured bool   `json:"configured"`
+			Active     bool   `json:"active"`
 		}
 		payload := struct {
 			Profiles []item `json:"profiles"`
@@ -28,11 +29,14 @@ func runList(_ context.Context, c Context) (int, error) {
 				Name:       target.Profile,
 				Command:    "clother-" + target.Profile,
 				Configured: configured(target, c.Secrets),
+				Active:     isActive(c, target.Profile),
 			})
 		}
 		data, _ := json.MarshalIndent(payload, "", "  ")
 		fmt.Fprintln(c.Output.Stdout, string(data))
 	case "plain":
+		// Names only: this format is for scripts, and a marker would be a
+		// format change rather than a decoration.
 		for _, target := range targets {
 			fmt.Fprintln(c.Output.Stdout, target.Profile)
 		}
@@ -43,14 +47,22 @@ func runList(_ context.Context, c Context) (int, error) {
 			if !configured(target, c.Secrets) {
 				status = "not configured"
 			}
+			if isActive(c, target.Profile) {
+				status += " (active)"
+			}
 			fmt.Fprintf(c.Output.Stdout, "  %-18s %s\n", target.Profile, status)
 		}
 		if len(targets) > 0 {
 			fmt.Fprintln(c.Output.Stdout)
-			fmt.Fprintln(c.Output.Stdout, "Run: clother-<name>")
+			fmt.Fprintln(c.Output.Stdout, "Run: clother <name>, or the clother-<name> launcher")
 		}
 	}
 	return 0, nil
+}
+
+// isActive reports whether a profile is the one a bare `clother` launches.
+func isActive(c Context, profile string) bool {
+	return c.Config != nil && c.Config.Active != nil && c.Config.Active.Profile == profile
 }
 
 func configured(target profiles.Target, secrets config.Secrets) bool {

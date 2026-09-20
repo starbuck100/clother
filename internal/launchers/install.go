@@ -13,6 +13,14 @@ import (
 	"github.com/jolehuit/clother/internal/providers"
 )
 
+// GeneratedFile is a file this install wrote, with the hash of what it wrote.
+// Removal re-verifies that hash, so a file the user has edited since is never
+// deleted as though it were ours.
+type GeneratedFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
 type Manifest struct {
 	Launchers []string `json:"launchers"`
 	// ClaudeShim records the `claude` entry this install created, so uninstall
@@ -20,6 +28,11 @@ type Manifest struct {
 	// afterwards. Manifests written before this field exists leave it empty,
 	// and an empty value means "remove nothing" — the safe direction to err in.
 	ClaudeShim string `json:"claude_shim,omitempty"`
+	// Commands records the slash commands this install wrote into the user's
+	// Claude configuration. An absent list, which is what a manifest written
+	// before this field existed has, means the same as an empty one: remove
+	// nothing.
+	Commands []GeneratedFile `json:"commands,omitempty"`
 }
 
 // SyncOptions selects what an install writes.
@@ -31,6 +44,13 @@ type SyncOptions struct {
 	// InstallClaudeShim writes the `claude` shim. It is false only when the user
 	// asked for their Claude Code to be left completely untouched.
 	InstallClaudeShim bool
+	// CommandDir is where the slash commands are written, and an empty value
+	// writes none. The caller resolves it, because it depends on the user's
+	// Claude configuration and on whether we are inside a session — neither of
+	// which this package has any business looking up. It is unaffected by
+	// InstallClaudeShim: the commands work in any Claude Code session, and the
+	// shim is orthogonal to them.
+	CommandDir string
 }
 
 // Sync installs the clother binary and provider launchers into paths.BinDir.
@@ -89,11 +109,28 @@ func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *c
 		link := filepath.Join(paths.BinDir, name)
 		// Removing first is what makes a re-install pick up a replaced binary,
 		// and it also clears anything a previous version left under this name.
-		_ = os.Remove(link)
+		if _, err := platform.RemoveExecutable(link); err != nil {
+			return err
+		}
 		if err := platform.LinkLauncher(execPath, binaryName, link, skipCopy); err != nil {
 			return err
 		}
 	}
+	// The slash commands are written here because this is where the binary they
+	// invoke has just been placed, and how to invoke it is baked into them.
+	//
+	// Opting out leaves alone whatever a previous install wrote, and keeps it in
+	// the manifest so uninstall still knows about it: --no-commands means "stop
+	// writing these", not "forget that they exist".
+	commands := previous.Commands
+	if opts.CommandDir != "" {
+		synced, err := SyncCommands(opts.CommandDir, CommandFileOptions{Clother: ClotherInvocation(paths)})
+		if err != nil {
+			return err
+		}
+		commands = synced
+	}
+
 	claudeShim := filepath.Join(paths.BinDir, platform.ClaudeName())
 	if !opts.InstallClaudeShim {
 		// A previous install may have left our shim under this name. It is
@@ -104,7 +141,7 @@ func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *c
 		if previous.ClaudeShim != "" && platform.SameInstallation(claudeShim, filepath.Join(paths.BinDir, binaryName)) {
 			_ = os.Remove(claudeShim)
 		}
-		return SaveManifest(paths.ManifestFile, Manifest{Launchers: launchers})
+		return SaveManifest(paths.ManifestFile, Manifest{Launchers: launchers, Commands: commands})
 	}
 	_ = os.Remove(claudeShim)
 	if err := platform.LinkShim(execPath, binaryName, claudeShim, skipCopy); err != nil {
@@ -113,6 +150,7 @@ func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *c
 	return SaveManifest(paths.ManifestFile, Manifest{
 		Launchers:  launchers,
 		ClaudeShim: platform.ClaudeName(),
+		Commands:   commands,
 	})
 }
 

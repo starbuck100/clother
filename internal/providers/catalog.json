@@ -558,6 +558,70 @@
       "usage": [
         "clother-llamacpp --model <model-name>"
       ]
+    },
+    {
+      "id": "openrouter",
+      "display_name": "OpenRouter",
+      "description": "100+ models via native API",
+      "category": "advanced",
+      "family": "openrouter",
+      "auth_mode": "secret",
+      "key_var": "OPENROUTER_API_KEY",
+      "base_url": "https://openrouter.ai/api",
+      "default_model": "anthropic/claude-sonnet-5",
+      "model_tiers": {
+        "haiku": "anthropic/claude-sonnet-5",
+        "sonnet": "anthropic/claude-sonnet-5",
+        "opus": "anthropic/claude-sonnet-5"
+      },
+      "model_choices": [
+        {
+          "id": "anthropic/claude-sonnet-5",
+          "description": "Claude Sonnet 5"
+        },
+        {
+          "id": "anthropic/claude-opus-5",
+          "description": "Claude Opus 5"
+        },
+        {
+          "id": "anthropic/claude-haiku-4.5",
+          "description": "Claude Haiku 4.5 (fastest, cheapest)"
+        },
+        {
+          "id": "anthropic/claude-fable-5.1",
+          "description": "Claude Fable 5.1"
+        },
+        {
+          "id": "z-ai/glm-5.3",
+          "description": "GLM-5.3"
+        },
+        {
+          "id": "moonshotai/kimi-k2.6",
+          "description": "Kimi K2.6"
+        },
+        {
+          "id": "deepseek/deepseek-v4-pro-0813",
+          "description": "DeepSeek V4 Pro"
+        },
+        {
+          "id": "qwen/qwen3.8-max-0902",
+          "description": "Qwen3.8 Max"
+        },
+        {
+          "id": "x-ai/grok-4.6",
+          "description": "Grok 4.6"
+        }
+      ],
+      "test_url": "https://openrouter.ai/api",
+      "setup": [
+        "Create an API key: https://openrouter.ai/keys",
+        "Set it with: clother config openrouter"
+      ],
+      "usage": [
+        "clother-openrouter",
+        "clother openrouter --model <vendor>/<model>",
+        "clother openrouter --model moonshotai/kimi-k2.6"
+      ]
     }
   ]
 }
