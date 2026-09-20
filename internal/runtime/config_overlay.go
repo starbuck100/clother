@@ -35,6 +35,13 @@ func PrepareClaudeConfigOverlay(target profiles.Target, args []string, env []str
 	}
 
 	claudeEnv := anthropicEnv(envMap)
+	if target.Family == providers.FamilyOpenRouter {
+		for _, key := range openRouterLimitKeys {
+			if value, ok := envMap[key]; ok {
+				claudeEnv[key] = value
+			}
+		}
+	}
 	if len(claudeEnv) == 0 {
 		return flattenEnv(envMap), func() {}, nil
 	}

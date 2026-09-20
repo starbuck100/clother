@@ -50,3 +50,10 @@ func TestModelOverrideReturnsEmptyWhenMissingValue(t *testing.T) {
 		t.Fatalf("ModelOverride() = %q, want empty", got)
 	}
 }
+
+func TestModelOverrideUsesLastFlagBeforeTerminator(t *testing.T) {
+	got := ModelOverride([]string{"--model", "vendor/first", "--model=vendor/last", "--", "--model=prompt/text"})
+	if got != "vendor/last" {
+		t.Fatalf("got %q", got)
+	}
+}

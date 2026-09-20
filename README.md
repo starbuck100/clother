@@ -253,7 +253,7 @@ The choice is remembered in `clother`'s own configuration (`clother status` prin
 
 Everything after the provider name goes to Claude Code unchanged. Where the two readings collide — `clother zai` against `clother fix the bug` — the provider name wins, because `clother zai --resume <id>` has to work; `--` is how you say "this is Claude Code's". A mistyped command is reported with a suggestion instead of being passed on as a prompt.
 
-For OpenRouter any `vendor/model` tag is accepted, so the shortlist in `clother info openrouter` is a convenience and not a limit. A model tag is only read for providers whose models are not a fixed list — `clother zai src/main.go` stays a prompt.
+For OpenRouter, enter a `vendor/model` tag from the current catalog. `clother config openrouter` fetches a live numbered list of free models compatible with text and tool calling; paid catalog models can also be entered directly. A model tag is only read for providers whose models are not a fixed list — `clother zai src/main.go` stays a prompt.
 
 ### Switching provider inside a session
 
@@ -371,11 +371,25 @@ clother-or kimi-k25                     # Works on every install
 clother-or-kimi-k25                     # Per-alias shortcut (curl installs)
 ```
 
-`clother-openrouter` works without creating an alias. Configuration accepts a
-model number from the shortlist or any `vendor/model` ID, including variants
-such as `:free`. Press Enter to keep the saved key and default model.
-`--model` overrides the model for this launch; `--yolo` is forwarded as
-`--dangerously-skip-permissions`.
+`clother-openrouter` works without creating an alias. `clother config openrouter`
+fetches the public model catalog and lists currently free models with text and
+tool support, including context and output limits. Pick a number for the default
+or an alias, or enter any compatible catalog model ID (including paid models).
+Models with missing/nonzero/conditional prices are not advertised as free.
+
+At launch, Clother checks the effective model (including `--model` overrides and
+aliases), using a catalog cache valid for 15 minutes. It bounds Claude Code's
+context, output and thinking settings and writes them to the temporary settings
+overlay. Output is at most the advertised ceiling, 32,000 tokens, and one quarter
+of the context window; a missing output ceiling uses a conservative 4,096-token
+cap. Smaller user limits are preserved. Thinking is disabled when unsupported.
+Use a current Claude Code version that supports `CLAUDE_CODE_MAX_CONTEXT_TOKENS`.
+Unknown or incompatible models produce an actionable error before launch.
+
+Free pricing does not remove provider quotas, rate limits or availability errors.
+The public catalog is not a per-provider capacity guarantee. A very large prompt
+or a model change inside Claude Code can still need a new session or relaunch;
+Clother applies these limits to the model selected **at launch**.
 
 Clother uses OpenRouter's [Anthropic-compatible endpoint](https://openrouter.ai/docs/cookbook/coding-agents/claude-code-integration),
 with bearer authentication and an explicitly empty Anthropic API key. Main,
