@@ -362,13 +362,34 @@ single launch, then restores the original session file afterwards.
 ### OpenRouter (100+ Models)
 
 ```bash
-clother config openrouter               # Set API key + add models
+clother config openrouter               # Set API key, default model, optional aliases
+clother-openrouter --yolo               # Launch with the configured default model
+clother-openrouter --yolo --model vendor/model
+clother test openrouter                 # Check authentication without inference charges
 # Example: alias moonshotai/kimi-k2.5 as kimi-k25
 clother-or kimi-k25                     # Works on every install
 clother-or-kimi-k25                     # Per-alias shortcut (curl installs)
 ```
 
-`clother-or <alias>` works on every install. curl installs additionally get a
+`clother-openrouter` works without creating an alias. Configuration accepts a
+model number from the shortlist or any `vendor/model` ID, including variants
+such as `:free`. Press Enter to keep the saved key and default model.
+`--model` overrides the model for this launch; `--yolo` is forwarded as
+`--dangerously-skip-permissions`.
+
+Clother uses OpenRouter's [Anthropic-compatible endpoint](https://openrouter.ai/docs/cookbook/coding-agents/claude-code-integration),
+with bearer authentication and an explicitly empty Anthropic API key. Main,
+Fable, Haiku, Sonnet, Opus, small/fast and subagent roles use the selected model.
+Claude Code compatibility depends on the model and upstream provider; OpenRouter
+only guarantees full compatibility with Anthropic's first-party provider.
+
+`clother test openrouter` checks the configured key with
+[`GET /api/v1/key`](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key).
+Missing keys, authentication failures and invalid responses return a nonzero
+exit code. This does not prove model availability or inference; use
+`clother-openrouter --print "Reply with OK"` for a real, billable model request.
+
+`clother-or <alias>` works on every install. curl and Windows installs additionally get a
 `clother-or-<alias>` symlink per alias when you run `clother config`; Homebrew
 installs skip per-alias symlinks (the formula owns its bin directory), so use
 the `clother-or <alias>` form there.

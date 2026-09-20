@@ -77,6 +77,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Verify OpenRouter launcher and yolo forwarding
+        shell: pwsh
+        run: |
+          Expand-Archive dist/clother_windows_amd64.zip -DestinationPath "$env:RUNNER_TEMP/openrouter-release"
+          ./scripts/test-openrouter.ps1 -BinaryPath "$env:RUNNER_TEMP/openrouter-release/clother.exe"
+
       - name: Install from the packaged release
         shell: pwsh
         run: |
@@ -95,7 +101,7 @@ jobs:
           ./scripts/install.ps1 -BinDir $bin
           if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
 
-          foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-or.exe', 'claude.exe') {
+          foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-openrouter.exe', 'clother-or.exe', 'claude.exe') {
             $path = Join-Path $bin $name
             if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
           }

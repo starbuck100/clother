@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/jolehuit/clother/internal/platform"
@@ -12,6 +13,8 @@ import (
 type Prompter struct {
 	In  io.Reader
 	Out io.Writer
+
+	reader *bufio.Reader
 }
 
 func NewPrompter(in io.Reader, out io.Writer) *Prompter {
@@ -24,8 +27,10 @@ func (p *Prompter) Prompt(label, defaultValue string) (string, error) {
 	} else {
 		fmt.Fprintf(p.Out, "%s: ", label)
 	}
-	reader := bufio.NewReader(p.In)
-	value, err := reader.ReadString('\n')
+	if p.reader == nil {
+		p.reader = bufio.NewReader(p.In)
+	}
+	value, err := p.reader.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return "", err
 	}
@@ -42,6 +47,9 @@ func (p *Prompter) Prompt(label, defaultValue string) (string, error) {
 // used instead of failing: refusing would make the command unusable in the
 // non-interactive setups that rely on it.
 func (p *Prompter) PromptSecret(label string) (string, error) {
+	if p.In != os.Stdin {
+		return p.Prompt(label, "")
+	}
 	value, handled := platform.ReadSecretLine(label, p.Out)
 	if !handled {
 		return p.Prompt(label, "")

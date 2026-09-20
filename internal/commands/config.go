@@ -149,9 +149,36 @@ func configOpenRouter(c Context) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if strings.TrimSpace(value) != "" {
+	if value = strings.TrimSpace(value); value != "" {
 		c.Secrets["OPENROUTER_API_KEY"] = value
 	}
+	if c.Secrets["OPENROUTER_API_KEY"] == "" {
+		return 1, fmt.Errorf("OpenRouter API key is required")
+	}
+	provider, ok := c.Catalog.Get("openrouter")
+	if !ok {
+		return 1, fmt.Errorf("OpenRouter provider missing from catalog")
+	}
+	override := c.Config.ProviderOverrides["openrouter"]
+	defaultModel := provider.DefaultModel
+	if override.Model != "" {
+		defaultModel = override.Model
+	}
+	fmt.Fprintln(c.Output.Stdout, "Default model for clother-openrouter (number or vendor/model):")
+	for idx, choice := range provider.ModelChoices {
+		fmt.Fprintf(c.Output.Stdout, "  %d. %-24s %s\n", idx+1, choice.ID, choice.Description)
+	}
+	model, err := c.Prompt.Prompt("Default model", defaultModel)
+	if err != nil {
+		return 1, err
+	}
+	model = resolveModelChoice(model, provider.ModelChoices)
+	if !profiles.IsModelTag(model) {
+		return 1, fmt.Errorf("invalid OpenRouter model %q (use vendor/model)", model)
+	}
+	override.Model = model
+	c.Config.ProviderOverrides["openrouter"] = override
+	fmt.Fprintln(c.Output.Stdout, "Optional model aliases for clother-or <alias>:")
 	for {
 		model, err := c.Prompt.Prompt("Model ID (empty to stop)", "")
 		if err != nil {
@@ -159,6 +186,9 @@ func configOpenRouter(c Context) (int, error) {
 		}
 		if strings.TrimSpace(model) == "" {
 			break
+		}
+		if !profiles.IsModelTag(model) {
+			return 1, fmt.Errorf("invalid OpenRouter model %q (use vendor/model)", model)
 		}
 		name, err := c.Prompt.Prompt("Alias", defaultAliasName(model))
 		if err != nil {

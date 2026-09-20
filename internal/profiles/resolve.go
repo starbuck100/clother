@@ -94,6 +94,7 @@ func Resolve(profile string, catalog providers.Catalog, cfg *config.File) (Targe
 		return Target{
 			Profile:     profile,
 			DisplayName: "OpenRouter: " + name,
+			Model:       model,
 			Description: "OpenRouter alias",
 			Category:    "advanced",
 			Family:      providers.FamilyOpenRouter,

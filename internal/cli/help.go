@@ -88,6 +88,7 @@ func ShowFull(w io.Writer, catalog providers.Catalog) {
 	fmt.Fprintln(w, "  --plain")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Launcher tips:")
+	fmt.Fprintln(w, "  clother-openrouter --yolo --model <vendor>/<model>")
 	fmt.Fprintln(w, "  clother-zai --yolo       skip permission prompts")
 	fmt.Fprintln(w, "  claude --yolo            same behavior via the Clother shim")
 	fmt.Fprintln(w, "  --yolo                   shorthand for --dangerously-skip-permissions")

@@ -87,7 +87,7 @@ func TestSyncCreatesBinaryAndLaunchers(t *testing.T) {
 
 	names := append(
 		[]string{platform.BinaryName(), platform.ClaudeName()},
-		launcherNames("zai", "native", "or-kimi", "myprovider", "or", "custom")...,
+		launcherNames("zai", "native", "openrouter", "or-kimi", "myprovider", "or", "custom")...,
 	)
 	for _, name := range names {
 		if _, err := os.Lstat(filepath.Join(paths.BinDir, name)); err != nil {
@@ -267,7 +267,7 @@ func TestSyncSkipsCopyAndUsesAbsoluteLinks(t *testing.T) {
 	// differs by platform — an absolute symlink on Unix, a hardlink on Windows,
 	// where a symlink would need a privilege the installer does not have — so
 	// the assertion is the one that matters either way: same file.
-	for _, name := range launcherNames("zai", "native", "or", "custom") {
+	for _, name := range launcherNames("zai", "native", "openrouter", "or", "custom") {
 		link := filepath.Join(paths.BinDir, name)
 		if !platform.SameFile(link, homebrewBin) {
 			t.Fatalf("%s does not resolve to %s", link, homebrewBin)

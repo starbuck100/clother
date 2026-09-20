@@ -109,7 +109,9 @@ func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *c
 		link := filepath.Join(paths.BinDir, name)
 		// Removing first is what makes a re-install pick up a replaced binary,
 		// and it also clears anything a previous version left under this name.
-		_ = os.Remove(link)
+		if _, err := platform.RemoveExecutable(link); err != nil {
+			return err
+		}
 		if err := platform.LinkLauncher(execPath, binaryName, link, skipCopy); err != nil {
 			return err
 		}
