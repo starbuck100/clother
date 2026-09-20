@@ -63,6 +63,8 @@ jobs:
           if ($failed) { exit 1 }
       - name: Package a release
         shell: bash
+        env:
+          VERSION: 3.2.0-ci.${{ github.sha }}
         run: ./scripts/package-release.sh dist
       - name: Publish the release artifacts for manual testing
         # Only on a pull request: a branch pushed to main is a release, and the
