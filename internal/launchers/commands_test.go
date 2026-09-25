@@ -78,7 +78,14 @@ func TestGeneratedCommandsContainNoShellExecution(t *testing.T) {
 			t.Errorf("%s opens a shell block", filepath.Base(file.Path))
 		}
 		if strings.Contains(content, "!`") {
-			t.Errorf("%s contains inline command substitution", filepath.Base(file.Path))
+			name := strings.TrimSuffix(filepath.Base(file.Path), ".md")
+			if name != "next" && name != "pin" && name != "free" && name != "auto" {
+				t.Errorf("argument-taking command %s executes shell", name)
+			}
+			expected := "!`'" + testClotherPath + "' __session " + name + "`"
+			if !strings.Contains(content, expected) || strings.Contains(content, "$ARGUMENTS") {
+				t.Errorf("unsafe control snippet: %s", name)
+			}
 		}
 		if strings.Contains(content, "shell:") {
 			t.Errorf("%s sets a shell in its frontmatter, which differs per platform and per machine", filepath.Base(file.Path))
@@ -101,7 +108,7 @@ func TestGeneratedCommandsCallTheHelper(t *testing.T) {
 		}
 		content := string(body)
 
-		if !strings.Contains(content, testClotherPath+" __session ") {
+		if !strings.Contains(content, testClotherPath+" __session ") && !strings.Contains(content, "'"+testClotherPath+"' __session ") {
 			t.Errorf("%s does not call the helper through the absolute path:\n%s", filepath.Base(file.Path), content)
 		}
 		if !strings.Contains(content, "disable-model-invocation: true") {

@@ -5,7 +5,7 @@ description: Track Clother usage and choose the next suitable free model across 
 
 # Clother free usage and model selection
 
-Use Clother 3.5.0 or later. Kilo Gateway works without installing Kilo Code.
+Use Clother 3.6.0 or later. Kilo Gateway works without installing Kilo Code.
 The installed Clother command for this skill is `{{CLOTHER}}`.
 Use a properly quoted executable path; in PowerShell prefix a quoted path with `&`.
 
@@ -105,6 +105,47 @@ Once any content or tool block has begun, Clother does not replay that request.
 Explain a partial-stream failure and inspect tool results before a manual retry.
 `CLOTHER_AUTO_FALLBACK=0` disables routing; `CLOTHER_FALLBACK_PLANNER=0` disables only
 the startup planning call; `CLOTHER_BENCHMARKS=0` skips benchmark downloads.
+
+## Session controls, budget and local evidence
+
+The session statusline is enabled automatically in the temporary Claude settings
+and shows the actual backend, Free/Paid, context occupancy, known quota, budget
+estimates/reservations and last switch reason. Unknown quota is shown as `?`.
+Original Claude settings remain unchanged. `CLOTHER_STATUSLINE=0` preserves the
+original statusline for that session.
+
+User controls run before inference: `/clother:next`, `/clother:pin`,
+`/clother:free`, `/clother:auto`. They apply at the next request boundary; ongoing
+responses finish. Pinning stops automatic switches. Free forbids new paid
+requests; auto restores the configured fallback policy. They cannot authorize
+keys or costs beyond that policy. Do not execute a control twice.
+
+Paid fallbacks default to a $1 UTC-day and $1 session cap. Configure with
+`clother config budget <daily-USD> <session-USD>` for new sessions. Zero blocks paid
+fallback. Clother reserves full advertised context plus bounded output at current
+maximum input/output rates before sending; parallel local sessions share a locked
+ledger. Complete usage settles the reservation conservatively. Unknown completion
+keeps the full reserve. This is a local ceiling under configured/published prices,
+not a provider invoice or a cap on other applications. Unknown/expired rates block
+paid requests. Direct DeepSeek prices refresh from its official pricing page;
+other keyed endpoints need explicit current rates in `budget.prices`.
+
+On paid fallback, at most once per five minutes and at a request boundary,
+Clother checks free eligibility and runs at most one harmless two-turn tool probe
+per provider. Only a successful probe allows automatic return. Known quota blocks
+still apply; an expired timer alone is not availability. Probes consume free usage.
+
+`local_observations` supplies 24-hour response success counts, generated tool-call
+responses, mean latency and consecutive failures. Three consecutive non-quota
+failures cause a ten-minute model cooldown. These are operational measurements,
+not coding-quality scores; generated tools do not prove successful execution.
+Use them alongside exact benchmark/category matches, capabilities and context.
+
+`clother doctor [kilo|openrouter] [model] [probe] [--json]` checks installation,
+credentials, budget readability and live catalog limits. Optional `probe` performs
+a real two-turn free tool exchange with `favicon` and `minLength`, validates the
+arguments, supplies a fixed local result and requires final `OK`. No external
+commands are executed by that test. JSON diagnostics omit secrets and prompts.
 
 ## Provider references
 

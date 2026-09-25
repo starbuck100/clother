@@ -7,6 +7,7 @@ import "strings"
 // and must never be mistaken for something to forward to Claude Code.
 var commandNames = []string{
 	"bench",
+	"doctor",
 	"config",
 	"help",
 	"info",

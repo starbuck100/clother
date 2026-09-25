@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jolehuit/clother/internal/budget"
 	"github.com/jolehuit/clother/internal/config"
 	"github.com/jolehuit/clother/internal/launchers"
 	"github.com/jolehuit/clother/internal/openrouter"
@@ -28,6 +29,29 @@ func runConfig(ctx context.Context, c Context, args []string) (int, error) {
 	}
 
 	switch providerID {
+	case "budget":
+		if len(args) == 1 {
+			b := budget.Defaults(c.Config.Budget)
+			fmt.Fprintf(c.Output.Stdout, "Paid fallback limits: $%.2f per UTC day, $%.2f per session (local reservations/estimates).\n", b.Daily, b.Session)
+			return 0, nil
+		}
+		if len(args) != 3 {
+			return 2, fmt.Errorf("usage: clother config budget <daily-USD> <session-USD>; zero blocks paid fallback")
+		}
+		daily, e1 := strconv.ParseFloat(args[1], 64)
+		session, e2 := strconv.ParseFloat(args[2], 64)
+		if e1 != nil || e2 != nil || !budget.Valid(daily) || !budget.Valid(session) {
+			return 2, fmt.Errorf("budget must be finite, nonnegative and <= 1000000 USD")
+		}
+		b := budget.Defaults(c.Config.Budget)
+		b.Daily = daily
+		b.Session = session
+		c.Config.Budget = &b
+		if e := config.SaveConfig(c.Paths.ConfigFile, c.Config); e != nil {
+			return 1, e
+		}
+		fmt.Fprintln(c.Output.Stdout, "Budget saved; applies to new sessions. Use /clother:free to block paid requests in this session.")
+		return 0, nil
 	case "fallback":
 		if len(args) != 2 || (args[1] != "paid" && args[1] != "free") {
 			return 2, fmt.Errorf("usage: clother config fallback free|paid (paid enables configured API keys after free routes)")

@@ -64,7 +64,7 @@ jobs:
       - name: Package a release
         shell: bash
         env:
-          VERSION: 3.5.0-ci.${{ github.sha }}
+          VERSION: 3.6.0-ci.${{ github.sha }}
         run: ./scripts/package-release.sh dist
       - name: Publish the release artifacts for manual testing
         # Only on a pull request: a branch pushed to main is a release, and the
@@ -108,7 +108,7 @@ jobs:
             if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
           }
           $commands = Join-Path $config 'commands\clother'
-          foreach ($name in 'provider.md', 'config.md', 'status.md', 'usage.md') {
+          foreach ($name in 'provider.md', 'config.md', 'status.md', 'usage.md', 'next.md', 'pin.md', 'free.md', 'auto.md') {
             if (-not (Test-Path -LiteralPath (Join-Path $commands $name))) { throw "$name was not written" }
           }
           if (-not (Test-Path -LiteralPath (Join-Path $config 'skills\clother-free-fallback\SKILL.md'))) { throw 'free fallback skill missing' }
@@ -127,12 +127,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "clother --version exited $LASTEXITCODE" }
           & $clother list --bin-dir $bin
           if ($LASTEXITCODE -ne 0) { throw "clother list exited $LASTEXITCODE" }
+          & $clother update --bin-dir $bin --yes
+          if ($LASTEXITCODE -ne 0) { throw "clother update/template refresh exited $LASTEXITCODE" }
+          & $clother config budget 1 1
+          if ($LASTEXITCODE -ne 0) { throw "budget configuration failed" }
           & $clother uninstall --bin-dir $bin --yes
           if ($LASTEXITCODE -ne 0) { throw "clother uninstall exited $LASTEXITCODE" }
           foreach ($name in 'clother.exe', 'clother-zai.exe', 'claude.exe') {
             if (Test-Path -LiteralPath (Join-Path $bin $name)) { throw "$name survived uninstall" }
           }
-          foreach ($name in 'provider.md', 'config.md', 'status.md', 'usage.md') {
+          foreach ($name in 'provider.md', 'config.md', 'status.md', 'usage.md', 'next.md', 'pin.md', 'free.md', 'auto.md') {
             if (Test-Path -LiteralPath (Join-Path $commands $name)) { throw "$name survived uninstall" }
           }
           if (Test-Path -LiteralPath $commands) { throw "the command directory survived uninstall" }
