@@ -3,6 +3,7 @@ package openrouter
 import (
 	"context"
 	"encoding/json"
+	"github.com/jolehuit/clother/internal/usage"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,54 @@ import (
 )
 
 const artifactRequest = `{"model":"qwen/qwen3.8-27b:free","max_tokens":512,"stream":true,"messages":[{"role":"user","content":"literal minLength must remain"}],"tools":[{"name":"artifact","input_schema":{"type":"object","properties":{"favicon":{"type":"string","minLength":1,"description":"Icon"},"minLength":{"type":"number"},"nested":{"type":"array","items":{"anyOf":[{"type":"string","minLength":2}]}}},"required":["favicon"],"additionalProperties":false,"examples":[{"minLength":9}]}}]}`
+
+func TestUsageProxyPreservesOtherModelSchemas(t *testing.T) {
+	body := strings.ReplaceAll(artifactRequest, "qwen/qwen3.8-27b:free", "vendor/other:free")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ := io.ReadAll(r.Body)
+		if string(got) != body || r.Header.Get("Authorization") != "Bearer secret" {
+			t.Error("tracking changed request or credential")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":15,\"output_tokens\":1}}}\n\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":4}}\n\ndata: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer upstream.Close()
+	store := usage.NewStore(t.TempDir())
+	tracker := &usage.Transport{Store: store, Provider: "openrouter", AccountScope: "scope"}
+	base, token, cleanup, err := StartSchemaProxy(context.Background(), upstream.URL, "secret", tracker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	req, _ := http.NewRequest("POST", base+"/v1/messages", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	// ReverseProxy may finish closing its upstream immediately after the client's
+	// EOF. Bound the wait instead of assuming goroutine scheduling order.
+	deadline := time.Now().Add(time.Second)
+	for {
+		events, err := store.Read(time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) == 1 {
+			e := events[0]
+			if e.Input == nil || *e.Input != 15 || e.Output == nil || *e.Output != 4 {
+				t.Fatalf("bad usage: %+v", e)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("usage not persisted")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
 
 func TestCompatibleToolSchemas(t *testing.T) {
 	patched, err := CompatibleToolSchemas([]byte(artifactRequest))

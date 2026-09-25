@@ -27,7 +27,7 @@ func NeedsSchemaCompatibility(model string) bool {
 // StartSchemaProxy keeps the upstream credential out of the loopback client.
 // Only this session's random token can use the proxy; it is never an open relay.
 // The proxy lives only as long as the Claude process and never records bodies.
-func StartSchemaProxy(ctx context.Context, baseURL, upstreamKey string) (string, string, func(), error) {
+func StartSchemaProxy(ctx context.Context, baseURL, upstreamKey string, transports ...http.RoundTripper) (string, string, func(), error) {
 	upstream, err := url.Parse(baseURL)
 	if err != nil || upstream.Host == "" || (upstream.Scheme != "https" && upstream.Scheme != "http") || upstream.User != nil {
 		return "", "", nil, fmt.Errorf("invalid OpenRouter endpoint")
@@ -42,6 +42,9 @@ func StartSchemaProxy(ctx context.Context, baseURL, upstreamKey string) (string,
 		return "", "", nil, fmt.Errorf("start OpenRouter schema compatibility: %w", err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	if len(transports) > 0 {
+		proxy.Transport = transports[0]
+	}
 	director := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		director(r)

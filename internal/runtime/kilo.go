@@ -5,9 +5,10 @@ import (
 	"github.com/jolehuit/clother/internal/kilo"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
+	"net/http"
 )
 
-func PrepareKiloProxy(ctx context.Context, cache string, target profiles.Target, env []string) ([]string, func(), error) {
+func PrepareKiloProxy(ctx context.Context, cache string, target profiles.Target, env []string, transports ...http.RoundTripper) ([]string, func(), error) {
 	if target.Family != providers.FamilyKilo {
 		return env, func() {}, nil
 	}
@@ -16,7 +17,7 @@ func PrepareKiloProxy(ctx context.Context, cache string, target profiles.Target,
 		return nil, nil, err
 	}
 	values := envSliceToMap(env)
-	endpoint, token, cleanup, err := kilo.Start(ctx, target.BaseURL, values["ANTHROPIC_AUTH_TOKEN"], catalog)
+	endpoint, token, cleanup, err := kilo.Start(ctx, target.BaseURL, values["ANTHROPIC_AUTH_TOKEN"], catalog, transports...)
 	if err != nil {
 		return nil, nil, err
 	}

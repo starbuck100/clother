@@ -150,7 +150,7 @@ func reportCommands(c Context) {
 		c.Output.Warn("could not locate your Claude configuration, so the /clother:* commands were not written")
 		return
 	}
-	c.Output.Line("installed %d slash commands to %s", len(manifest.Commands), filepath.Dir(manifest.Commands[0].Path))
+	c.Output.Line("installed %d command/skill files (commands: %s)", len(manifest.Commands), filepath.Dir(manifest.Commands[0].Path))
 }
 
 // pathHint tells the user how to get BinDir onto PATH in the idiom of their

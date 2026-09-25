@@ -278,11 +278,20 @@
       "auth_mode": "secret",
       "key_var": "DEEPSEEK_API_KEY",
       "base_url": "https://api.deepseek.com/anthropic",
-      "default_model": "deepseek-chat",
+      "default_model": "deepseek-flash",
       "model_tiers": {
-        "small": "deepseek-chat"
+        "small": "deepseek-flash"
       },
-      "model_choices": [],
+      "model_choices": [
+        {
+          "id": "deepseek-flash",
+          "description": "DeepSeek V4.1 Flash"
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "description": "DeepSeek V4 Pro"
+        }
+      ],
       "test_url": "https://api.deepseek.com/anthropic",
       "setup": [],
       "usage": []

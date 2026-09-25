@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,16 +23,16 @@ var openRouterLimitKeys = []string{
 	"CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING",
 }
 
-func PrepareOpenRouterProxy(ctx context.Context, target profiles.Target, args, env []string) ([]string, func(), error) {
+func PrepareOpenRouterProxy(ctx context.Context, target profiles.Target, args, env []string, transports ...http.RoundTripper) ([]string, func(), error) {
 	envMap := envSliceToMap(env)
 	model := ModelOverride(args)
 	if model == "" {
 		model = effectiveSessionModel(target, envMap)
 	}
-	if target.Family != providers.FamilyOpenRouter || !openrouter.NeedsSchemaCompatibility(model) {
+	if target.Family != providers.FamilyOpenRouter || (len(transports) == 0 && !openrouter.NeedsSchemaCompatibility(model)) {
 		return env, func() {}, nil
 	}
-	endpoint, token, cleanup, err := openrouter.StartSchemaProxy(ctx, target.BaseURL, envMap["ANTHROPIC_AUTH_TOKEN"])
+	endpoint, token, cleanup, err := openrouter.StartSchemaProxy(ctx, target.BaseURL, envMap["ANTHROPIC_AUTH_TOKEN"], transports...)
 	if err != nil {
 		return nil, nil, err
 	}

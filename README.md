@@ -381,6 +381,90 @@ Incomplete tool streams produce an error before any buffered tool is handed to C
 `clother test kilo` checks catalog reachability and model compatibility; it does not
 claim to test authentication or inference. `clother bench kilo` sends a real model request.
 
+## Usage, free quotas and fallback skill
+
+```powershell
+clother usage
+clother usage openrouter --json
+clother usage next kilo stealth/space-bunny-alpha
+clother usage next openrouter cohere/north-mini-code:free --json
+```
+
+From v3.5.0, new OpenRouter and Kilo sessions and gateway benchmarks record local
+request counts, provider-reported tokens/cache/costs and limit observations. The
+ledger contains no prompts, generated text, tool arguments or credentials. It uses
+immutable per-request files under the Clother data directory, `usage/v1`, to support
+simultaneous sessions. The CLI displays today (UTC), the last hour and 30 days.
+Older metadata stays on disk until you remove that directory. Usage before tracking
+was installed and traffic outside Clother cannot be reconstructed.
+
+OpenRouter's live `/api/v1/key` response supplies the daily free-request policy
+(`used`, `limit`, `remaining`), resetting at midnight UTC. Missing fields are unknown,
+not zero; credit balances are separate. Exempt endpoints/accounts and BYOK may not
+be gated by the reported policy. Kilo documents 200 free requests/hour/IP across
+models and keys, but no exact remaining-counter API. Clother therefore shows local
+observations and confirmed limit errors, never `200 - local requests` as a claimed
+remaining balance. `Retry-After`/reset headers are used when supplied. A generic
+429 is kept distinct from a confirmed provider-wide free limit or upstream limit.
+
+`usage next` refreshes **both** model catalogs, excludes paid/incompatible choices,
+blocks every model of an exhausted provider and considers context, image support,
+the same model on another gateway and recent local success. Its ranking is a
+capability heuristic, not a quality benchmark or live inference test. Context is
+estimated from recent reported usage with a reserve, not exact tokenization of a
+future request. It recommends commands; it does not switch or replay tool calls.
+
+`usage next` also includes **LiveBench** scores across Coding, Agentic Coding,
+Reasoning, Mathematics, Data Analysis, Language and instruction following. It
+fetches the current public dataset, caches it for one hour and reports dataset
+version, source modification time and fetch time separately. All eligible live
+models are listed. Exact model versions must match; stealth/unknown models stay
+unranked. Missing scores are not zero. The installed **clother-free-fallback** skill
+also explains when Arena's text/vision/web-development categories or Artificial
+Analysis are useful additional sources, without conflating their scales.
+
+New free-model sessions prepare a fallback order with **the same starting model**
+(one tracked request, 18-second timeout). Invalid/unavailable planning falls back
+to deterministic capability/benchmark ordering. The local router keeps the same
+Claude Code process and history, rechecks quotas, tries compatible free models
+across both gateways, clamps output limits, and displays backend switches in the
+response. `/clother:usage` shows the active backend even when Claude's static model
+label still shows the original. No request is replayed after content/tool output
+starts; transport failures with unknown completion are not replayed either.
+
+Paid fallback is opt-in:
+
+```powershell
+clother config fallback paid   # free first, then configured API keys (may cost)
+clother config fallback free   # free only (default)
+```
+
+The preferred keyed fallback is DeepSeek V4.1 Flash (`deepseek-flash`), followed by
+other configured Anthropic-compatible profiles. Credentials are never invented.
+Unknown model capacities use a conservative 32k text bound; long/image requests
+may have no eligible replacement. Free/provider quota failures skip the entire
+provider. Up to six rejected attempts are allowed; schema errors and partial
+streams stop instead of cycling. Quota checks cannot guarantee future availability.
+
+Set `CLOTHER_FALLBACK_CATEGORY` to a LiveBench category (default `Agentic Coding`),
+`CLOTHER_FALLBACK_PLANNER=0` to skip startup inference, `CLOTHER_BENCHMARKS=0` to skip
+benchmark fetches, or `CLOTHER_AUTO_FALLBACK=0` to disable session routing.
+Installation adds `/clother:usage` and `/clother-free-fallback` to Claude Code.
+
+For an upgrade from v3.4.0 or older, refresh generated files once after updating:
+
+```powershell
+clother update
+clother install
+```
+
+The older updater replaces the executable using its old list of generated files;
+the second command installs the new usage command and skill. Existing provider
+settings and keys are preserved. `--no-commands` skips generated commands/skills.
+
+Primary policies: [OpenRouter limits](https://openrouter.ai/docs/api/reference/limits)
+and [Kilo usage and billing](https://kilo.ai/docs/gateway/usage-and-billing).
+
 ## Provider Reference
 
 ### Cloud
@@ -392,7 +476,7 @@ claim to test authentication or inference. `clother bench kilo` sends a real mod
 | `clother-minimax` | MiniMax | MiniMax-M3 | [minimax.io](https://minimax.io) |
 | `clother-kimi` | Kimi | k3-256k | [kimi.com](https://kimi.com) |
 | `clother-moonshot` | Moonshot AI | kimi-k3 | [moonshot.ai](https://moonshot.ai) |
-| `clother-deepseek` | DeepSeek | deepseek-chat | [deepseek.com](https://platform.deepseek.com) |
+| `clother-deepseek` | DeepSeek | deepseek-flash | [deepseek.com](https://platform.deepseek.com) |
 | `clother-mimo` | Xiaomi MiMo | mimo-v2.5-pro | [xiaomimimo.com](https://platform.xiaomimimo.com) |
 | `clother-alibaba` | Alibaba Coding Plan | qwen3.7-plus | [modelstudio](https://modelstudio.console.alibabacloud.com) |
 | `clother-alibaba-us` | Alibaba Coding Plan (US) | qwen3.7-plus | [modelstudio](https://modelstudio.console.alibabacloud.com) |

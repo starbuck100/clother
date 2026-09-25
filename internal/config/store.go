@@ -38,6 +38,7 @@ type Active struct {
 }
 
 type File struct {
+	FallbackPaid      bool                        `json:"fallback_paid,omitempty"`
 	Version           int                         `json:"version"`
 	ProviderOverrides map[string]ProviderOverride `json:"provider_overrides,omitempty"`
 	OpenRouterAliases map[string]string           `json:"openrouter_aliases,omitempty"`

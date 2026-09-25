@@ -28,6 +28,16 @@ func runConfig(ctx context.Context, c Context, args []string) (int, error) {
 	}
 
 	switch providerID {
+	case "fallback":
+		if len(args) != 2 || (args[1] != "paid" && args[1] != "free") {
+			return 2, fmt.Errorf("usage: clother config fallback free|paid (paid enables configured API keys after free routes)")
+		}
+		c.Config.FallbackPaid = args[1] == "paid"
+		if err := config.SaveConfig(c.Paths.ConfigFile, c.Config); err != nil {
+			return 1, err
+		}
+		fmt.Fprintf(c.Output.Stdout, "Automatic fallback: free providers first; configured paid keys enabled: %t\n", c.Config.FallbackPaid)
+		return 0, nil
 	case "kilo":
 		return configKilo(ctx, c)
 	case "openrouter":
