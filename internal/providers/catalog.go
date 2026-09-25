@@ -25,6 +25,7 @@ const (
 	FamilyAnthropicCompatibleNonClaude Family = "anthropic_compatible_non_claude"
 	FamilyLocal                        Family = "local"
 	FamilyOpenRouter                   Family = "openrouter"
+	FamilyKilo                         Family = "kilo"
 	FamilyCustomUnknown                Family = "custom_unknown"
 )
 

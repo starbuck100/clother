@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jolehuit/clother/internal/kilo"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 )
@@ -29,6 +30,24 @@ func runTest(ctx context.Context, c Context, args []string) (int, error) {
 	okCount, failCount := 0, 0
 	for _, target := range targets {
 		if target.Profile == "native" {
+			continue
+		}
+		if target.Family == providers.FamilyKilo {
+			catalog, err := kilo.Load(ctx, target.BaseURL, c.Paths.CacheDir, true)
+			if err == nil {
+				model, lookupErr := catalog.Find(benchModel(target))
+				err = lookupErr
+				if err == nil {
+					err = model.Validate()
+				}
+			}
+			if err != nil {
+				fmt.Fprintf(c.Output.Stdout, "  %-18s failed: %v\n", target.Profile, err)
+				failCount++
+			} else {
+				fmt.Fprintf(c.Output.Stdout, "  %-18s catalog reachable, model compatible (authentication and inference not tested)\n", target.Profile)
+				okCount++
+			}
 			continue
 		}
 		if target.Family == providers.FamilyOpenRouter {

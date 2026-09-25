@@ -28,6 +28,8 @@ func runConfig(ctx context.Context, c Context, args []string) (int, error) {
 	}
 
 	switch providerID {
+	case "kilo":
+		return configKilo(ctx, c)
 	case "openrouter":
 		return configOpenRouter(ctx, c)
 	case "custom":

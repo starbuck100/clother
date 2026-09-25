@@ -76,6 +76,7 @@ func TestProviderSetIsModelTagProvider(t *testing.T) {
 		want bool
 	}{
 		{"openrouter", "openrouter", true},
+		{"kilo", "kilo", true},
 		{"a custom provider", "mine", true},
 		{"a fixed model list", "zai", false},
 		{"the subscription", "native", false},

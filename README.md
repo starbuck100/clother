@@ -34,7 +34,7 @@
 > irm https://raw.githubusercontent.com/starbuck100/clother/main/scripts/install.ps1 | iex
 > ```
 >
-> Everything else — providers, profiles, commands — is unchanged from upstream. See
+> This fork also adds live OpenRouter model selection and a direct Kilo gateway bridge. See
 > [Platform Support](#platform-support) for the detail.
 
 ## Why Clother?
@@ -342,6 +342,44 @@ clother-kimi --resume <session-id>
 When resuming a non-Claude session into native Claude, Clother temporarily
 sanitizes incompatible non-Claude thinking blocks for the duration of that
 single launch, then restores the original session file afterwards.
+
+## Kilo free models (no Kilo Code installation)
+
+```powershell
+clother update
+clother config kilo
+clother-kilo --yolo
+```
+
+Configuration fetches Kilo's current catalog and lists free models that advertise text
+and tool support, with numbered selection, context/output limits and the provider's
+training flag. Leave the optional key empty for anonymous use. A saved Kilo key can
+be removed by entering `-`. Paid models require a Kilo gateway key.
+
+The default is `kilo-auto/free`. You can also choose an explicit catalog model:
+
+```powershell
+clother kilo --model stealth/space-bunny-alpha --yolo
+```
+
+Clother talks directly to [Kilo Gateway](https://kilo.ai/docs/gateway) and translates
+Claude's Messages API to its Chat Completions API, including streamed text, tool calls
+and tool results. No Kilo Code app, extension or CLI is needed. Claude Code itself is
+still required. Anonymous use is subject to Kilo's free-model quotas and availability.
+
+Catalog data is refreshed during configuration and cached for at most 15 minutes at
+launch. Context and output limits bound Claude's settings; each request also caps output
+for its selected model. Smaller user limits are preserved. Free pricing is checked from
+the catalog, including numeric zero prices; anonymous requests cannot use paid models.
+
+Text and ordinary client/MCP tools are supported, as are message images when advertised
+by the model. PDF/document blocks, image tool results, native Anthropic server tools and
+exact token counting are not currently supported by this bridge and return explicit
+errors. Tool search is disabled for Kilo sessions so tools are sent as normal definitions.
+Incomplete tool streams produce an error before any buffered tool is handed to Claude.
+
+`clother test kilo` checks catalog reachability and model compatibility; it does not
+claim to test authentication or inference. `clother bench kilo` sends a real model request.
 
 ## Provider Reference
 

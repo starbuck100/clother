@@ -64,7 +64,7 @@ jobs:
       - name: Package a release
         shell: bash
         env:
-          VERSION: 3.3.1-ci.${{ github.sha }}
+          VERSION: 3.4.0-ci.${{ github.sha }}
         run: ./scripts/package-release.sh dist
       - name: Publish the release artifacts for manual testing
         # Only on a pull request: a branch pushed to main is a release, and the
@@ -103,7 +103,7 @@ jobs:
           ./scripts/install.ps1 -BinDir $bin
           if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
 
-          foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-openrouter.exe', 'clother-or.exe', 'claude.exe') {
+          foreach ($name in 'clother.exe', 'clother-zai.exe', 'clother-openrouter.exe', 'clother-kilo.exe', 'clother-or.exe', 'claude.exe') {
             $path = Join-Path $bin $name
             if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
           }

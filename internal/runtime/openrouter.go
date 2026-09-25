@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/jolehuit/clother/internal/kilo"
 	"github.com/jolehuit/clother/internal/openrouter"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
@@ -40,7 +41,7 @@ func PrepareOpenRouterProxy(ctx context.Context, target profiles.Target, args, e
 }
 
 func PrepareOpenRouterEnv(ctx context.Context, cacheDir string, target profiles.Target, args, env []string) ([]string, error) {
-	if target.Family != providers.FamilyOpenRouter {
+	if target.Family != providers.FamilyOpenRouter && target.Family != providers.FamilyKilo {
 		return env, nil
 	}
 	envMap := envSliceToMap(env)
@@ -48,7 +49,13 @@ func PrepareOpenRouterEnv(ctx context.Context, cacheDir string, target profiles.
 	if id == "" {
 		id = effectiveSessionModel(target, envMap)
 	}
-	catalog, err := openrouter.Load(ctx, target.BaseURL, cacheDir, false)
+	var catalog openrouter.Catalog
+	var err error
+	if target.Family == providers.FamilyKilo {
+		catalog, err = kilo.Load(ctx, target.BaseURL, cacheDir, false)
+	} else {
+		catalog, err = openrouter.Load(ctx, target.BaseURL, cacheDir, false)
+	}
 	if err != nil {
 		return nil, err
 	}
