@@ -21,6 +21,24 @@ var openRouterLimitKeys = []string{
 	"CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING",
 }
 
+func PrepareOpenRouterProxy(ctx context.Context, target profiles.Target, args, env []string) ([]string, func(), error) {
+	envMap := envSliceToMap(env)
+	model := ModelOverride(args)
+	if model == "" {
+		model = effectiveSessionModel(target, envMap)
+	}
+	if target.Family != providers.FamilyOpenRouter || !openrouter.NeedsSchemaCompatibility(model) {
+		return env, func() {}, nil
+	}
+	endpoint, token, cleanup, err := openrouter.StartSchemaProxy(ctx, target.BaseURL, envMap["ANTHROPIC_AUTH_TOKEN"])
+	if err != nil {
+		return nil, nil, err
+	}
+	envMap["ANTHROPIC_BASE_URL"] = endpoint
+	envMap["ANTHROPIC_AUTH_TOKEN"] = token
+	return flattenEnv(envMap), cleanup, nil
+}
+
 func PrepareOpenRouterEnv(ctx context.Context, cacheDir string, target profiles.Target, args, env []string) ([]string, error) {
 	if target.Family != providers.FamilyOpenRouter {
 		return env, nil

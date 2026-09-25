@@ -386,6 +386,15 @@ cap. Smaller user limits are preserved. Thinking is disabled when unsupported.
 Use a current Claude Code version that supports `CLAUDE_CODE_MAX_CONTEXT_TOKENS`.
 Unknown or incompatible models produce an actionable error before launch.
 
+For `qwen/qwen3.8-27b` and its `:free` variant, Clother runs a temporary,
+authenticated loopback proxy to work around the provider's rejection of
+`minLength` in tool schemas (for example `artifact.favicon`). Only outbound tool
+schemas are adjusted: minimum lengths become description hints, while property
+names, types, required fields, prompts and tool results remain intact. The
+original tool definitions stay in Claude/MCP; server-side grammar enforcement of
+the minimum length is unavailable for this provider. Other models are unchanged.
+The proxy forwards streaming responses and closes when the launcher exits.
+
 Free pricing does not remove provider quotas, rate limits or availability errors.
 The public catalog is not a per-provider capacity guarantee. A very large prompt
 or a model change inside Claude Code can still need a new session or relaunch;
