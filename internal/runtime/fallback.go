@@ -79,6 +79,12 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 			warn(id + " fallback catalog unavailable")
 			continue
 		}
+		if id == initialProvider {
+			initial, e := cat.Find(model)
+			if e != nil || !initial.Free() {
+				return env, cleanup, nil
+			}
+		}
 		catalogs[id] = cat
 		targets[id] = t
 		key := secrets[t.SecretKey]

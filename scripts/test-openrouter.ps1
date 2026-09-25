@@ -19,6 +19,8 @@ class Stub {
         Console.WriteLine("ARGS=" + string.Join("|", args));
         Console.WriteLine("PROFILE=" + Environment.GetEnvironmentVariable("CLOTHER_PROFILE"));
         Console.WriteLine("ENDPOINT=" + Environment.GetEnvironmentVariable("ANTHROPIC_BASE_URL"));
+        string token = Environment.GetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN");
+        Console.WriteLine("SESSION_TOKEN_OK=" + (token != null && token.Length == 64 && token != "test-only-no-network"));
         Console.WriteLine("MODEL=" + Environment.GetEnvironmentVariable("ANTHROPIC_MODEL"));
         Console.WriteLine("FABLE=" + Environment.GetEnvironmentVariable("ANTHROPIC_DEFAULT_FABLE_MODEL"));
         Console.WriteLine("MAX_OUTPUT=" + Environment.GetEnvironmentVariable("CLAUDE_CODE_MAX_OUTPUT_TOKENS"));
@@ -61,7 +63,10 @@ foreach ($case in $cases) {
     $lines | Write-Output
     if ($lines -notcontains ('ARGS=' + $case.Expected)) { throw 'Argument forwarding mismatch' }
     if ($lines -notcontains 'PROFILE=openrouter') { throw 'Wrong provider' }
-    if ($lines -notcontains 'ENDPOINT=https://openrouter.ai/api') { throw 'Wrong endpoint' }
+    # Usage observation now runs through a session-authenticated loopback proxy.
+    # Go proxy tests verify the upstream endpoint and credential replacement.
+    if (-not ($lines | Where-Object { $_ -match '^ENDPOINT=http://127\.0\.0\.1:\d+$' })) { throw 'Missing local usage proxy' }
+    if ($lines -notcontains 'SESSION_TOKEN_OK=True') { throw 'Upstream credential reached Claude' }
     foreach ($expected in 'MAX_OUTPUT=2048', 'MAX_CONTEXT=32768', 'THINKING=0') {
         if ($lines -notcontains $expected) { throw ('Incorrect model limit: ' + $expected) }
     }
