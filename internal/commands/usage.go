@@ -180,6 +180,10 @@ func runUsage(ctx context.Context, c Context, args []string) (int, error) {
 		if current == sessionProfile() && os.Getenv("ANTHROPIC_MODEL") != "" {
 			model = os.Getenv("ANTHROPIC_MODEL")
 		}
+		if len(args) == 0 && report.ActiveRoute != nil && (report.ActiveRoute.Provider == "kilo" || report.ActiveRoute.Provider == "openrouter") {
+			current = report.ActiveRoute.Provider
+			model = report.ActiveRoute.Model
+		}
 		if len(args) == 2 {
 			model = args[1]
 		}

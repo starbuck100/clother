@@ -17,9 +17,10 @@ tracking was installed, other applications and other devices are not in the loca
 ledger. Missing usage is unknown, not zero. Tokens are provider-reported counts;
 cache counters and costs may be missing. Request quotas are not token quotas.
 
-Determine the actual current provider and model from the user's command or the
-running session (`CLOTHER_PROFILE` and `ANTHROPIC_MODEL`). A remembered default may
-differ. Then run `{{CLOTHER}} usage next <provider> <model> --json`. With no explicit
+Determine the actual current provider and model from `active_session_route` in
+`usage --json` first; after a switch the startup environment (`CLOTHER_PROFILE`,
+`ANTHROPIC_MODEL`) and remembered default may differ. Otherwise use the user's
+command or startup environment. Run `{{CLOTHER}} usage next <provider> <model> --json`. With no explicit
 arguments it uses the current session or remembered selection. This fetches both
 live catalogs and does not spend inference tokens or change providers.
 

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -132,4 +134,21 @@ func TestUsageCommandLiveQuotaAndBothCatalogs(t *testing.T) {
 		t.Fatal("key leaked")
 	}
 	configNotWritten(t, c)
+	path := filepath.Join(t.TempDir(), "route.json")
+	if err := os.WriteFile(path, []byte(`{"provider":"kilo","model":"vendor/b:free","free":true}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLOTHER_ROUTE_STATUS", path)
+	t.Setenv("CLOTHER_PROFILE", "openrouter")
+	t.Setenv("ANTHROPIC_MODEL", "vendor/a:free")
+	out.Reset()
+	if code, err := runUsage(context.Background(), c, []string{"next"}); code != 0 || err != nil {
+		t.Fatalf("%d %v", code, err)
+	}
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.CurrentProvider != "kilo" || result.CurrentModel != "vendor/b:free" {
+		t.Fatal("used stale launch environment after switch")
+	}
 }
