@@ -26,6 +26,9 @@ type Output struct {
 }
 
 func New(format Format, quiet bool) *Output {
+	if format == "" {
+		format = FormatHuman
+	}
 	// Turning on virtual terminal processing is what makes the escape sequences
 	// below render on a Windows console instead of printing themselves.
 	platform.EnableVirtualTerminal()
