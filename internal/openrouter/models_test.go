@@ -91,3 +91,24 @@ func TestCatalogRefreshCacheAndFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestNumericZeroPricing(t *testing.T) {
+	for _, tc := range []struct {
+		pricing string
+		free    bool
+	}{
+		{`{"prompt":0,"completion":0,"discount":0}`, true},
+		{`{"prompt":"0","completion":"0","discount":0}`, true},
+		{`{"prompt":null,"completion":0}`, false},
+		{`{"prompt":0,"completion":0.01}`, false},
+		{`{"prompt":0,"completion":false}`, false},
+	} {
+		var model Model
+		if err := json.Unmarshal([]byte(tc.pricing), &model.Pricing); err != nil {
+			t.Fatal(err)
+		}
+		if model.Free() != tc.free {
+			t.Errorf("pricing %s free=%v", tc.pricing, model.Free())
+		}
+	}
+}

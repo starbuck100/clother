@@ -35,7 +35,10 @@ func PrepareClaudeConfigOverlay(target profiles.Target, args []string, env []str
 	}
 
 	claudeEnv := anthropicEnv(envMap)
-	if target.Family == providers.FamilyOpenRouter {
+	if target.Family == providers.FamilyKilo {
+		claudeEnv["ENABLE_TOOL_SEARCH"] = "false"
+	}
+	if target.Family == providers.FamilyOpenRouter || target.Family == providers.FamilyKilo {
 		for _, key := range openRouterLimitKeys {
 			if value, ok := envMap[key]; ok {
 				claudeEnv[key] = value
@@ -174,7 +177,7 @@ func mirrorClaude(sourceDir, overlayDir string) ([]overlayLink, error) {
 	return append(links, overlayLink{overlay: dst, source: statePath}), nil
 }
 
-// linkOverlayEntry mirrors one entry into the overlay — a directory link for a
+// linkOverlayEntry mirrors one entry into the overlay â€” a directory link for a
 // directory, a file link for a file, never a copy.
 //
 // This is load-bearing. Claude Code writes new sessions into

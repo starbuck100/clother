@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jolehuit/clother/internal/config"
+	"github.com/jolehuit/clother/internal/kilo"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
 )
@@ -136,11 +137,26 @@ func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets
 		apiKey = target.LiteralAuthToken
 	}
 
+	if target.Family == providers.FamilyKilo {
+		catalog, err := kilo.Load(ctx, target.BaseURL, "", true)
+		if err != nil {
+			res.Err = err
+			return res
+		}
+		endpoint, token, cleanup, err := kilo.Start(ctx, target.BaseURL, secrets["KILO_API_KEY"], catalog)
+		if err != nil {
+			res.Err = err
+			return res
+		}
+		defer cleanup()
+		target.BaseURL = endpoint
+		apiKey = token
+	}
 	endpoint := strings.TrimRight(target.BaseURL, "/") + "/v1/messages"
 
 	body, err := json.Marshal(map[string]interface{}{
 		"model":      model,
-		"max_tokens": 64,
+		"max_tokens": benchOutputLimit(target),
 		"stream":     true,
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
@@ -181,6 +197,7 @@ func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets
 
 	scanner := bufio.NewScanner(resp.Body)
 	ttftDone := false
+	completed := false
 	var preview strings.Builder
 
 	for scanner.Scan() {
@@ -197,6 +214,10 @@ func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets
 			continue
 		}
 		eventType, _ := event["type"].(string)
+		if eventType == "error" {
+			res.Err = fmt.Errorf("provider stream error: %v", event["error"])
+			return res
+		}
 		if eventType == "content_block_delta" && !ttftDone {
 			res.TTFT = time.Since(start)
 			ttftDone = true
@@ -209,10 +230,19 @@ func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets
 			}
 		}
 		if eventType == "message_stop" {
+			completed = true
 			break
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		res.Err = err
+		return res
+	}
+	if target.Family == providers.FamilyKilo && (!completed || preview.Len() == 0) {
+		res.Err = fmt.Errorf("Kilo returned no completed text response")
+		return res
+	}
 	res.Total = time.Since(start)
 	p := strings.TrimSpace(preview.String())
 	if len(p) > 40 {
@@ -250,4 +280,11 @@ func benchModel(target profiles.Target) string {
 		}
 	}
 	return ""
+}
+
+func benchOutputLimit(target profiles.Target) int {
+	if target.Family == providers.FamilyKilo {
+		return 4096
+	}
+	return 64
 }

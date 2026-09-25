@@ -16,7 +16,7 @@ import (
 //
 // It first checks the HOMEBREW_PREFIX env var (set during `brew install`),
 // then falls back to inspecting whether the resolved executable path lives
-// inside a Homebrew Cellar directory — which is the case when the user runs
+// inside a Homebrew Cellar directory â€” which is the case when the user runs
 // a Homebrew-installed binary from their normal shell session.
 func IsHomebrew() bool {
 	if os.Getenv("HOMEBREW_PREFIX") != "" {
@@ -68,7 +68,7 @@ func BuildEnv(target profiles.Target, secrets config.Secrets) ([]string, error) 
 		}
 	}
 
-	if target.Family == providers.FamilyOpenRouter {
+	if target.Family == providers.FamilyOpenRouter || target.Family == providers.FamilyKilo {
 		model := target.Model
 		if model == "" {
 			model = target.ModelTiers["sonnet"]
@@ -82,6 +82,11 @@ func BuildEnv(target profiles.Target, secrets config.Secrets) ([]string, error) 
 
 	switch target.AuthMode {
 	case providers.AuthNone:
+		if target.Family == providers.FamilyKilo {
+			envMap["ANTHROPIC_AUTH_TOKEN"] = secrets["KILO_API_KEY"]
+			envMap["ANTHROPIC_API_KEY"] = ""
+			envMap["ENABLE_TOOL_SEARCH"] = "false"
+		}
 	case providers.AuthLiteral:
 		envMap["ANTHROPIC_AUTH_TOKEN"] = target.LiteralAuthToken
 		envMap["ANTHROPIC_API_KEY"] = ""

@@ -622,6 +622,33 @@
         "clother openrouter --model <vendor>/<model>",
         "clother openrouter --model moonshotai/kimi-k2.6"
       ]
+    },
+    {
+      "id": "kilo",
+      "display_name": "Kilo Gateway",
+      "description": "Live free models, no Kilo Code required",
+      "category": "advanced",
+      "family": "kilo",
+      "auth_mode": "none",
+      "key_var": "KILO_API_KEY",
+      "base_url": "https://api.kilo.ai/api/gateway",
+      "default_model": "kilo-auto/free",
+      "model_tiers": {
+        "haiku": "kilo-auto/free",
+        "sonnet": "kilo-auto/free",
+        "opus": "kilo-auto/free",
+        "small": "kilo-auto/free"
+      },
+      "model_choices": [],
+      "test_url": "https://api.kilo.ai/api/gateway/models",
+      "setup": [
+        "Choose a live free model: clother config kilo",
+        "Free models work anonymously; a Kilo API key is optional."
+      ],
+      "usage": [
+        "clother-kilo --yolo",
+        "clother kilo --model stealth/space-bunny-alpha --yolo"
+      ]
     }
   ]
 }

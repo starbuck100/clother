@@ -51,54 +51,61 @@ func TestOpenRouterLimits(t *testing.T) {
 	}
 }
 
-func TestOpenRouterOverrideLimitsReachSettingsOverlay(t *testing.T) {
-	root := t.TempDir()
-	source := filepath.Join(root, "claude")
-	if err := os.MkdirAll(source, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	original := `{"env":{"CLAUDE_CODE_MAX_OUTPUT_TOKENS":"99999","MAX_THINKING_TOKENS":"99999"}}`
-	if err := os.WriteFile(filepath.Join(source, "settings.json"), []byte(original), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var model openrouter.Model
-	if err := json.Unmarshal([]byte(`{"id":"vendor/override","context_length":32768,"top_provider":{"max_completion_tokens":2048},"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"supported_parameters":["tools"]}`), &model); err != nil {
-		t.Fatal(err)
-	}
-	catalog := openrouter.Catalog{BaseURL: "https://example.invalid/api", FetchedAt: time.Now(), Models: []openrouter.Model{model}}
-	data, _ := json.Marshal(catalog)
-	if err := os.WriteFile(filepath.Join(root, "openrouter-models.json"), data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	target := profiles.Target{Family: providers.FamilyOpenRouter, BaseURL: catalog.BaseURL, Model: "absent/default"}
-	args := []string{"--model", "vendor/override"}
-	env, err := PrepareOpenRouterEnv(context.Background(), root, target, args, []string{"CLAUDE_CONFIG_DIR=" + source})
-	if err != nil {
-		t.Fatal(err)
-	}
-	env, cleanup, err := PrepareClaudeConfigOverlay(target, args, env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanup()
-	data, err = os.ReadFile(filepath.Join(envSliceToMap(env)["CLAUDE_CONFIG_DIR"], "settings.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var settings struct {
-		Env map[string]string `json:"env"`
-	}
-	if err := json.Unmarshal(data, &settings); err != nil {
-		t.Fatal(err)
-	}
-	if settings.Env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] != "2048" || settings.Env["MAX_THINKING_TOKENS"] != "0" || settings.Env["ANTHROPIC_MODEL"] != "vendor/override" {
-		t.Fatalf("settings bypass limits: %v", settings.Env)
-	}
-	data, _ = os.ReadFile(filepath.Join(source, "settings.json"))
-	if string(data) != original {
-		t.Fatal("original settings modified")
-	}
-	if _, err := PrepareOpenRouterEnv(context.Background(), root, target, nil, nil); err == nil {
-		t.Fatal("unknown default model accepted")
+func TestGatewayOverrideLimitsReachSettingsOverlay(t *testing.T) {
+	for _, family := range []providers.Family{providers.FamilyOpenRouter, providers.FamilyKilo} {
+		t.Run(string(family), func(t *testing.T) {
+			cacheName := string(family) + "-models.json"
+
+			root := t.TempDir()
+			source := filepath.Join(root, "claude")
+			if err := os.MkdirAll(source, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			original := `{"env":{"CLAUDE_CODE_MAX_OUTPUT_TOKENS":"99999","MAX_THINKING_TOKENS":"99999"}}`
+			if err := os.WriteFile(filepath.Join(source, "settings.json"), []byte(original), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var model openrouter.Model
+			if err := json.Unmarshal([]byte(`{"id":"vendor/override","context_length":32768,"top_provider":{"max_completion_tokens":2048},"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"supported_parameters":["tools"]}`), &model); err != nil {
+				t.Fatal(err)
+			}
+			catalog := openrouter.Catalog{BaseURL: "https://example.invalid/api", FetchedAt: time.Now(), Models: []openrouter.Model{model}}
+			data, _ := json.Marshal(catalog)
+			if err := os.WriteFile(filepath.Join(root, cacheName), data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			target := profiles.Target{Family: family, BaseURL: catalog.BaseURL, Model: "absent/default"}
+			args := []string{"--model", "vendor/override"}
+			env, err := PrepareOpenRouterEnv(context.Background(), root, target, args, []string{"CLAUDE_CONFIG_DIR=" + source})
+			if err != nil {
+				t.Fatal(err)
+			}
+			env, cleanup, err := PrepareClaudeConfigOverlay(target, args, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+			data, err = os.ReadFile(filepath.Join(envSliceToMap(env)["CLAUDE_CONFIG_DIR"], "settings.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var settings struct {
+				Env map[string]string `json:"env"`
+			}
+			if err := json.Unmarshal(data, &settings); err != nil {
+				t.Fatal(err)
+			}
+			if settings.Env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] != "2048" || settings.Env["MAX_THINKING_TOKENS"] != "0" || settings.Env["ANTHROPIC_MODEL"] != "vendor/override" {
+				t.Fatalf("settings bypass limits: %v", settings.Env)
+			}
+			data, _ = os.ReadFile(filepath.Join(source, "settings.json"))
+			if string(data) != original {
+				t.Fatal("original settings modified")
+			}
+			if _, err := PrepareOpenRouterEnv(context.Background(), root, target, nil, nil); err == nil {
+				t.Fatal("unknown default model accepted")
+			}
+
+		})
 	}
 }

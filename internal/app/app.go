@@ -278,7 +278,7 @@ func (p providerSet) IsModelTagProvider(name string) bool {
 	if err != nil {
 		return false
 	}
-	return target.Family == providers.FamilyOpenRouter || target.Family == providers.FamilyCustomUnknown
+	return target.Family == providers.FamilyKilo || target.Family == providers.FamilyOpenRouter || target.Family == providers.FamilyCustomUnknown
 }
 
 func (p providerSet) Gateway(kind string, args []string) (string, []string, error) {
