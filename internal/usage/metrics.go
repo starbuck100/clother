@@ -1,6 +1,9 @@
 package usage
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Metrics struct {
 	Samples             int       `json:"samples"`
@@ -20,7 +23,7 @@ func Measure(events []Event, provider, scope, model string, now time.Time) Metri
 		if e.Provider != provider || e.Scope != scope || e.Model != model || now.Sub(e.At) > 24*time.Hour {
 			continue
 		}
-		if e.Limit != nil && (e.Status == 429 || e.Status == 401 || e.Status == 402) {
+		if e.Limit != nil && (e.Status == 429 || e.Status == 401 || e.Status == 402 || strings.HasPrefix(e.Limit.Kind, "free_") || e.Limit.Kind == "rate_limit" || e.Limit.Kind == "upstream_rate" || e.Limit.Kind == "authentication" || e.Limit.Kind == "credit_or_budget") {
 			continue
 		}
 		m.Samples++

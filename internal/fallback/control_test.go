@@ -53,12 +53,18 @@ func TestSessionControlsAndRecovery(t *testing.T) {
 	// A timer or a failed probe must never be enough to return to free.
 	var probes atomic.Int32
 	r.Recover = func(context.Context, Route) bool { probes.Add(1); return false }
+	r.mu.Lock()
+	r.lastRecovery = time.Now().Add(-time.Minute)
+	r.mu.Unlock()
 	request(t, base, key, false)
 	if r.State().Free || probes.Load() != 1 {
 		t.Fatal("unconfirmed return")
 	}
 	exhausted.Store(false)
 	r.Recover = func(context.Context, Route) bool { return true }
+	r.mu.Lock()
+	r.lastRecovery = time.Now().Add(-time.Minute)
+	r.mu.Unlock()
 	request(t, base, key, false)
 	if !r.State().Free || r.State().Reason != "free availability confirmed by probe" {
 		t.Fatal("confirmed return missing")

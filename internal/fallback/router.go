@@ -215,6 +215,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				status = streamStatus(reject)
 			}
 			if status == 429 || status == 402 || status == 401 || status == 503 || status == 502 || status == 500 {
+				switch status {
+				case 429:
+					switchReason = route.Provider + " quota/rate limit (HTTP 429)"
+				case 402:
+					switchReason = route.Provider + " budget/credit limit (HTTP 402)"
+				case 401:
+					switchReason = route.Provider + " authentication failed"
+				default:
+					switchReason = fmt.Sprintf("%s provider error (HTTP %d)", route.Provider, status)
+				}
 				// Unknown/gateway quota and outages skip the entire provider. Only an
 				// explicit upstream-model rate limit allows another model on that gateway.
 				text := strings.ToLower(string(reject))

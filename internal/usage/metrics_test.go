@@ -24,7 +24,7 @@ func TestLocalMetricsScopeCooldownAndRecovery(t *testing.T) {
 	if m.Cooling(now) || m.ToolResponses != 1 || m.MeanMS != 100 {
 		t.Fatalf("%+v", m)
 	}
-	events = append(events, Event{At: now, Provider: "kilo", Scope: "account", Model: "model", Status: 429, Limit: &Limit{Kind: "free_hour", Scope: "provider"}})
+	events = append(events, Event{At: now, Provider: "kilo", Scope: "account", Model: "model", Status: 200, Limit: &Limit{Kind: "free_hour", Scope: "provider"}})
 	if m2 := Measure(events, "kilo", "account", "model", now); m2.Samples != 4 {
 		t.Fatal("quota polluted reliability score")
 	}
