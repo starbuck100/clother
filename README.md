@@ -795,3 +795,14 @@ are not a quality benchmark or proof that a generated tool executed correctly.
 small free requests; it never executes model-generated commands. Without `probe`,
 diagnostics do not perform inference. JSON output omits keys, prompts and raw
 provider responses.
+
+
+`clother doctor` groups system checks, each provider, paid fallback budgets and
+next steps into separate sections. Terminal output uses green success badges,
+yellow setup/limit notices and red failures. Budget bars show local estimates and
+reservations; quota bars appear only when the provider returns a measured counter.
+Context/output values are model limits, not consumed tokens. Missing Kilo quota
+remains explicitly unknown; anonymous access is shown as optional-key access.
+Colors are disabled for redirected output, `NO_COLOR` and `--plain`; `--json`
+retains the machine-readable diagnostic format. No inference is performed unless
+`probe` is requested.

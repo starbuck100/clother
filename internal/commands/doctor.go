@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/jolehuit/clother/internal/budget"
 	"github.com/jolehuit/clother/internal/fallback"
@@ -20,6 +19,7 @@ import (
 )
 
 type doctorProvider struct {
+	quota    *usage.FreeQuota
 	Provider string `json:"provider"`
 	Key      bool   `json:"key_configured"`
 	Catalog  bool   `json:"catalog_reachable"`
@@ -59,15 +59,8 @@ func runDoctor(ctx context.Context, c Context, args []string) (int, error) {
 	_, nativeErr := runtime.FindRealClaude(c.Paths)
 	_, launcherErr := os.Stat(filepath.Join(c.Paths.BinDir, platform.BinaryName()))
 	_, lockErr := os.Stat(filepath.Join(c.Paths.DataDir, "budget", "v1", "lock"))
-	_, ledgerErr := (budget.Ledger{Dir: filepath.Join(c.Paths.DataDir, "budget", "v1"), Config: budget.Defaults(c.Config.Budget)}).Summary()
-	report := struct {
-		Native         bool             `json:"native_claude_found"`
-		Launcher       bool             `json:"clother_launcher_found"`
-		BudgetReadable bool             `json:"budget_readable"`
-		BudgetLock     bool             `json:"budget_lock_present"`
-		Providers      []doctorProvider `json:"providers"`
-		Note           string           `json:"note"`
-	}{Native: nativeErr == nil, Launcher: launcherErr == nil, BudgetReadable: ledgerErr == nil, BudgetLock: lockErr == nil, Note: "Metadata-only diagnostics; no keys, prompts or raw provider errors. A catalog is not proof of inference. Probe sends two small synthetic free requests; quota may be consumed."}
+	budgetInfo, ledgerErr := (budget.Ledger{Dir: filepath.Join(c.Paths.DataDir, "budget", "v1"), Session: os.Getenv("CLOTHER_BUDGET_SESSION"), Config: budget.Defaults(c.Config.Budget)}).Summary()
+	report := doctorReport{Native: nativeErr == nil, Launcher: launcherErr == nil, BudgetReadable: ledgerErr == nil, BudgetLock: lockErr == nil, Note: "Metadata-only diagnostics; no keys, prompts or raw provider errors. A catalog is not proof of inference. Probe sends two small synthetic free requests; quota may be consumed."}
 	code := 0
 	if nativeErr != nil || ledgerErr != nil {
 		code = 1
@@ -107,6 +100,7 @@ func runDoctor(ctx context.Context, c Context, args []string) (int, error) {
 		if id == "openrouter" && key != "" {
 			if account, e := usage.FetchOpenRouter(ctx, target.BaseURL, key); e == nil {
 				d.Auth = "passed"
+				d.quota = account.FreeDaily
 				if account.FreeDaily != nil && account.FreeDaily.Remaining == 0 {
 					d.Auth = "free quota exhausted"
 				}
@@ -154,15 +148,15 @@ func runDoctor(ctx context.Context, c Context, args []string) (int, error) {
 		enc.SetIndent("", "  ")
 		return code, enc.Encode(report)
 	}
-	fmt.Fprintf(c.Output.Stdout, "Clother doctor | native Claude: %t | launcher: %t | budget readable: %t | lock present: %t\n", report.Native, report.Launcher, report.BudgetReadable, report.BudgetLock)
-	for _, p := range report.Providers {
-		fmt.Fprintf(c.Output.Stdout, "%s | key: %t | live catalog: %t | %s | free: %t | context: %d | output: %d | auth: %s | probe: %s\n", p.Provider, p.Key, p.Catalog, strings.Map(func(r rune) rune {
-			if r < 32 {
-				return -1
-			}
-			return r
-		}, p.Model), p.Free, p.Context, p.Output, p.Auth, p.Probe)
-	}
-	fmt.Fprintln(c.Output.Stdout, report.Note)
+	printDoctor(c.Output, report, budgetInfo, os.Getenv("CLOTHER_BUDGET_SESSION") != "")
 	return code, nil
+}
+
+type doctorReport struct {
+	Native         bool             `json:"native_claude_found"`
+	Launcher       bool             `json:"clother_launcher_found"`
+	BudgetReadable bool             `json:"budget_readable"`
+	BudgetLock     bool             `json:"budget_lock_present"`
+	Providers      []doctorProvider `json:"providers"`
+	Note           string           `json:"note"`
 }
