@@ -31,18 +31,28 @@ func Launch(ctx context.Context, paths config.Paths, target profiles.Target, arg
 	if err != nil {
 		return 1, err
 	}
+	transport, err := gatewayUsageTransport(ctx, paths, target, env)
+	if err != nil {
+		return 1, err
+	}
 	var kiloCleanup func()
-	env, kiloCleanup, err = PrepareKiloProxy(ctx, paths.CacheDir, target, env)
+	env, kiloCleanup, err = PrepareKiloProxy(ctx, paths.CacheDir, target, env, transport)
 	if err != nil {
 		return 1, err
 	}
 	defer kiloCleanup()
 	var proxyCleanup func()
-	env, proxyCleanup, err = PrepareOpenRouterProxy(ctx, target, args, env)
+	env, proxyCleanup, err = PrepareOpenRouterProxy(ctx, target, args, env, transport)
 	if err != nil {
 		return 1, err
 	}
 	defer proxyCleanup()
+	var fallbackCleanup func()
+	env, fallbackCleanup, err = PrepareFallback(ctx, paths, target, args, env)
+	if err != nil {
+		return 1, err
+	}
+	defer fallbackCleanup()
 	env, cleanup, err = PrepareClaudeConfigOverlay(target, args, env)
 	if err != nil {
 		return 1, err

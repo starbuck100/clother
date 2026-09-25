@@ -23,7 +23,7 @@ func Load(ctx context.Context, base, cache string, refresh bool) (openrouter.Cat
 
 // Start keeps the gateway credential in this process. Claude receives only an
 // ephemeral token accepted by this loopback server.
-func Start(ctx context.Context, base, key string, catalog openrouter.Catalog) (string, string, func(), error) {
+func Start(ctx context.Context, base, key string, catalog openrouter.Catalog, transports ...http.RoundTripper) (string, string, func(), error) {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return "", "", nil, err
@@ -34,6 +34,9 @@ func Start(ctx context.Context, base, key string, catalog openrouter.Catalog) (s
 		return "", "", nil, err
 	}
 	client := &http.Client{Timeout: 10 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if len(transports) > 0 {
+		client.Transport = transports[0]
+	}
 	server := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		supplied := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if supplied == "" {

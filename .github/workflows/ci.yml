@@ -64,7 +64,7 @@ jobs:
       - name: Package a release
         shell: bash
         env:
-          VERSION: 3.4.0-ci.${{ github.sha }}
+          VERSION: 3.5.0-ci.${{ github.sha }}
         run: ./scripts/package-release.sh dist
       - name: Publish the release artifacts for manual testing
         # Only on a pull request: a branch pushed to main is a release, and the
@@ -108,9 +108,10 @@ jobs:
             if (-not (Test-Path -LiteralPath $path)) { throw "$name was not created" }
           }
           $commands = Join-Path $config 'commands\clother'
-          foreach ($name in 'provider.md', 'config.md', 'status.md') {
+          foreach ($name in 'provider.md', 'config.md', 'status.md', 'usage.md') {
             if (-not (Test-Path -LiteralPath (Join-Path $commands $name))) { throw "$name was not written" }
           }
+          if (-not (Test-Path -LiteralPath (Join-Path $config 'skills\clother-free-fallback\SKILL.md'))) { throw 'free fallback skill missing' }
           # And nothing reached the real home, which is what the scratch
           # directory above is for.
           if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.claude\commands\clother')) {
@@ -131,7 +132,7 @@ jobs:
           foreach ($name in 'clother.exe', 'clother-zai.exe', 'claude.exe') {
             if (Test-Path -LiteralPath (Join-Path $bin $name)) { throw "$name survived uninstall" }
           }
-          foreach ($name in 'provider.md', 'config.md', 'status.md') {
+          foreach ($name in 'provider.md', 'config.md', 'status.md', 'usage.md') {
             if (Test-Path -LiteralPath (Join-Path $commands $name)) { throw "$name survived uninstall" }
           }
           if (Test-Path -LiteralPath $commands) { throw "the command directory survived uninstall" }

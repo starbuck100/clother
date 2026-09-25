@@ -43,6 +43,7 @@ var commandTemplates = []commandTemplate{
 	{name: "provider.md", body: providerCommand},
 	{name: "config.md", body: configCommand},
 	{name: "status.md", body: statusCommand},
+	{name: "usage.md", body: usageCommand},
 }
 
 type commandTemplate struct {
@@ -118,8 +119,8 @@ func RemoveCommands(files []GeneratedFile) (removed, kept []string) {
 	// The directory only, never RemoveAll, and only after the files: it is
 	// removed if it is empty and the call fails harmlessly if it is not, which is
 	// what leaves anything the user put there alone.
-	if len(files) > 0 {
-		_ = os.Remove(filepath.Dir(files[0].Path))
+	for _, file := range files {
+		_ = os.Remove(filepath.Dir(file.Path))
 	}
 	return removed, kept
 }
@@ -265,4 +266,8 @@ func statusCommand(clother string) string {
 	b.WriteString("\n")
 	b.WriteString(dataNotice)
 	return b.String()
+}
+
+func usageCommand(clother string) string {
+	return commandFrontmatter("Show local usage and provider free quotas, or compare free models.", "[next] [provider] [model]", clother) + "\nRun the helper with the request arguments as data:\n    " + invoke(clother) + " __session usage <arguments>\nReport measured usage, unknown counters and quota scope accurately. Do not change providers.\n" + dataNotice + "\nRequest: $ARGUMENTS\n"
 }

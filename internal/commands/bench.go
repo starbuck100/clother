@@ -15,8 +15,10 @@ import (
 
 	"github.com/jolehuit/clother/internal/config"
 	"github.com/jolehuit/clother/internal/kilo"
+	"github.com/jolehuit/clother/internal/openrouter"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/providers"
+	"github.com/jolehuit/clother/internal/usage"
 )
 
 const benchDefaultPrompt = "Say hello in one word."
@@ -92,7 +94,7 @@ func runBench(ctx context.Context, c Context, args []string) (int, error) {
 		wg.Add(1)
 		go func(idx int, target profiles.Target) {
 			defer wg.Done()
-			results[idx] = doBench(ctx, target, c.Secrets, prompt)
+			results[idx] = doBench(ctx, target, c.Secrets, prompt, c.Paths.DataDir)
 		}(i, t)
 	}
 	wg.Wait()
@@ -125,7 +127,7 @@ func runBench(ctx context.Context, c Context, args []string) (int, error) {
 	return 0, nil
 }
 
-func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets, prompt string) benchResult {
+func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets, prompt string, dataDirs ...string) benchResult {
 	model := benchModel(target)
 	res := benchResult{Profile: target.Profile, Model: model}
 
@@ -137,13 +139,29 @@ func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets
 		apiKey = target.LiteralAuthToken
 	}
 
+	var tracker http.RoundTripper
+	if len(dataDirs) > 0 && (target.Family == providers.FamilyOpenRouter || target.Family == providers.FamilyKilo) {
+		var cat openrouter.Catalog
+		var err error
+		if target.Family == providers.FamilyKilo {
+			cat, err = kilo.Load(ctx, target.BaseURL, "", true)
+		} else {
+			cat, err = openrouter.Load(ctx, target.BaseURL, "", true)
+		}
+		if err != nil {
+			res.Err = err
+			return res
+		}
+		provider := string(target.Family)
+		tracker = &usage.Transport{Store: usage.NewStore(dataDirs[0]), Provider: provider, AccountScope: usage.Scope(provider, target.BaseURL, secrets[target.SecretKey]), IsFree: func(id string) bool { model, err := cat.Find(id); return err == nil && model.Free() }}
+	}
 	if target.Family == providers.FamilyKilo {
 		catalog, err := kilo.Load(ctx, target.BaseURL, "", true)
 		if err != nil {
 			res.Err = err
 			return res
 		}
-		endpoint, token, cleanup, err := kilo.Start(ctx, target.BaseURL, secrets["KILO_API_KEY"], catalog)
+		endpoint, token, cleanup, err := kilo.Start(ctx, target.BaseURL, secrets["KILO_API_KEY"], catalog, tracker)
 		if err != nil {
 			res.Err = err
 			return res
@@ -181,6 +199,9 @@ func doBench(ctx context.Context, target profiles.Target, secrets config.Secrets
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
+	if target.Family == providers.FamilyOpenRouter {
+		client.Transport = tracker
+	}
 	start := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {

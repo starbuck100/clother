@@ -31,10 +31,12 @@ func runSession(ctx context.Context, c Context, args []string) (int, error) {
 		return sessionProvider(c, args[1:])
 	case "config":
 		return sessionConfig(c, args[1:])
+	case "usage":
+		return runUsage(ctx, c, args[1:])
 	case "status":
 		return runStatus(ctx, c)
 	default:
-		return 2, fmt.Errorf("usage: clother __session <provider|config|status> [args...]")
+		return 2, fmt.Errorf("usage: clother __session <provider|config|status|usage> [args...]")
 	}
 }
 

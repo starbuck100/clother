@@ -128,7 +128,11 @@ func Sync(execPath string, paths config.Paths, catalog providers.Catalog, cfg *c
 		if err != nil {
 			return err
 		}
-		commands = synced
+		skill, err := SyncFreeSkill(opts.CommandDir, ClotherInvocation(paths))
+		if err != nil {
+			return err
+		}
+		commands = append(synced, skill)
 	}
 
 	claudeShim := filepath.Join(paths.BinDir, platform.ClaudeName())

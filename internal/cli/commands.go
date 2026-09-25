@@ -16,6 +16,7 @@ var commandNames = []string{
 	"test",
 	"uninstall",
 	"update",
+	"usage",
 	"__session",
 }
 

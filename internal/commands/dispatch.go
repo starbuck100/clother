@@ -18,6 +18,7 @@ import (
 // site.
 var dispatch = map[string]func(context.Context, Context, []string) (int, error){
 	"bench":     runBench,
+	"usage":     runUsage,
 	"config":    runConfig,
 	"info":      runInfo,
 	"test":      runTest,
