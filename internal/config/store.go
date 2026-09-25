@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jolehuit/clother/internal/budget"
 	"github.com/jolehuit/clother/internal/providers"
 )
 
@@ -38,6 +39,7 @@ type Active struct {
 }
 
 type File struct {
+	Budget            *budget.Config              `json:"budget,omitempty"`
 	FallbackPaid      bool                        `json:"fallback_paid,omitempty"`
 	Version           int                         `json:"version"`
 	ProviderOverrides map[string]ProviderOverride `json:"provider_overrides,omitempty"`

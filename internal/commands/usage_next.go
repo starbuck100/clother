@@ -9,9 +9,11 @@ import (
 
 	"github.com/jolehuit/clother/internal/benchmarks"
 	"github.com/jolehuit/clother/internal/openrouter"
+	"github.com/jolehuit/clother/internal/usage"
 )
 
 type candidate struct {
+	Local      usage.Metrics    `json:"local_observations"`
 	Benchmarks []benchmarks.Row `json:"benchmark_evidence,omitempty"`
 	Provider   string           `json:"provider"`
 	Model      string           `json:"model"`
@@ -94,6 +96,18 @@ func recommend(r *usageReport) {
 				continue
 			}
 			item := candidate{Provider: p.Provider, Model: m.ID, Context: m.ContextLimit(), Output: m.TopProvider.MaxCompletionTokens, Reasons: []string{"free pricing and tool support advertised"}}
+			scope := ""
+			if len(p.Events) > 0 {
+				scope = p.Events[0].Scope
+			}
+			item.Local = usage.Measure(p.Events, p.Provider, scope, m.ID, r.At)
+			if item.Local.Cooling(r.At) {
+				continue
+			}
+			item.Score += int(item.Local.Score())
+			if item.Local.Samples > 0 {
+				item.Reasons = append(item.Reasons, fmt.Sprintf("local 24h: %d/%d successful responses, %d tool responses, mean %d ms", item.Local.Successes, item.Local.Samples, item.Local.ToolResponses, item.Local.MeanMS))
+			}
 			if p.Provider == "kilo" {
 				value := m.MayTrainOnPrompts
 				item.MayTrain = &value

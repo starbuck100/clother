@@ -27,6 +27,10 @@ func runSession(ctx context.Context, c Context, args []string) (int, error) {
 	}
 
 	switch action {
+	case "next", "pin", "free", "auto":
+		return sessionControl(ctx, c, action)
+	case "statusline":
+		return sessionStatusline(c)
 	case "provider":
 		return sessionProvider(c, args[1:])
 	case "config":

@@ -12,6 +12,7 @@ import (
 )
 
 type Transport struct {
+	Before                 func([]byte, *Event) (func(Event), error)
 	Base                   http.RoundTripper
 	Store                  Store
 	Provider, AccountScope string
@@ -30,6 +31,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return base.RoundTrip(req)
 	}
 	event := Event{At: time.Now().UTC(), Provider: t.Provider, Scope: t.AccountScope, Outcome: "incomplete"}
+	var requestBody []byte
 	if req.Body != nil {
 		body, err := io.ReadAll(io.LimitReader(req.Body, 32<<20+1))
 		_ = req.Body.Close()
@@ -39,6 +41,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if len(body) > 32<<20 {
 			return nil, fmt.Errorf("inference request exceeds 32 MiB")
 		}
+		requestBody = body
 		req.Body = io.NopCloser(bytes.NewReader(body))
 		var payload map[string]any
 		if json.Unmarshal(body, &payload) == nil {
@@ -49,7 +52,16 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if t.IsFree != nil {
 		event.Free = t.IsFree(event.Model)
 	}
-	observation := &observer{event: event, transport: t, headers: http.Header{}}
+	var done func(Event)
+	if t.Before != nil {
+		var err error
+		done, err = t.Before(requestBody, &event)
+		if err != nil {
+			data, _ := json.Marshal(map[string]any{"type": "error", "error": map[string]any{"type": "budget_error", "message": err.Error()}})
+			return &http.Response{StatusCode: 402, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewReader(data)), Request: req}, nil
+		}
+	}
+	observation := &observer{event: event, transport: t, headers: http.Header{}, done: done}
 	resp, err := base.RoundTrip(req)
 	if err != nil {
 		observation.event.Outcome = "connection_error"
@@ -101,6 +113,7 @@ func (r *observedBody) Read(p []byte) (int, error) {
 func (r *observedBody) Close() error { err := r.ReadCloser.Close(); r.observe.finish(); return err }
 
 type observer struct {
+	done                                    func(Event)
 	event                                   Event
 	transport                               *Transport
 	headers                                 http.Header
@@ -148,6 +161,16 @@ func (o *observer) consume(data []byte) {
 	if limit := classify(o.event.Provider, o.event.Status, o.headers, payload, o.event.At); limit != nil {
 		o.event.Limit = limit
 	}
+	if b, ok := payload["content_block"].(map[string]any); ok && b["type"] == "tool_use" {
+		o.event.ToolCalls++
+	}
+	if blocks, ok := payload["content"].([]any); ok {
+		for _, b := range blocks {
+			if m, ok := b.(map[string]any); ok && m["type"] == "tool_use" {
+				o.event.ToolCalls++
+			}
+		}
+	}
 	o.takeUsage(payload["usage"])
 	if message, ok := payload["message"].(map[string]any); ok {
 		o.takeUsage(message["usage"])
@@ -163,6 +186,9 @@ func (o *observer) consume(data []byte) {
 						o.failed = true
 					} else {
 						o.complete = true
+						if reason == "tool_calls" {
+							o.event.ToolCalls++
+						}
 					}
 				}
 			}
@@ -225,6 +251,9 @@ func (o *observer) finish() {
 			o.event.Outcome = "ok"
 		}
 		o.event.DurationMS = time.Since(o.event.At).Milliseconds()
+		if o.done != nil {
+			o.done(o.event)
+		}
 		if err := o.transport.Store.Record(o.event); err != nil && o.transport.Warn != nil {
 			o.transport.warnOnce.Do(func() { o.transport.Warn("Usage tracking could not be saved; local counters are incomplete.") })
 		}

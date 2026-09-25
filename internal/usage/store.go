@@ -26,6 +26,7 @@ type Limit struct {
 }
 
 type Event struct {
+	ToolCalls  int       `json:"generated_tool_calls,omitempty"`
 	At         time.Time `json:"at"`
 	Provider   string    `json:"provider"`
 	Scope      string    `json:"account_scope"`

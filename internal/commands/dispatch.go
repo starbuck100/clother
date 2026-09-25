@@ -23,6 +23,7 @@ var dispatch = map[string]func(context.Context, Context, []string) (int, error){
 	"info":      runInfo,
 	"test":      runTest,
 	"__session": runSession,
+	"doctor":    runDoctor,
 	"list":      withoutArgs(runList),
 	"status":    withoutArgs(runStatus),
 	"install":   withoutArgs(runInstall),

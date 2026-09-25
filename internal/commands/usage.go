@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/jolehuit/clother/internal/benchmarks"
+	"github.com/jolehuit/clother/internal/budget"
 	"github.com/jolehuit/clother/internal/fallback"
 	"github.com/jolehuit/clother/internal/kilo"
 	"github.com/jolehuit/clother/internal/openrouter"
 	"github.com/jolehuit/clother/internal/profiles"
 	"github.com/jolehuit/clother/internal/ui"
 	"github.com/jolehuit/clother/internal/usage"
+	"path/filepath"
 )
 
 type providerUsage struct {
@@ -38,6 +40,7 @@ type providerUsage struct {
 }
 
 type usageReport struct {
+	Budget             *budget.Summary    `json:"paid_fallback_budget,omitempty"`
 	Benchmark          *benchmarks.Report `json:"benchmark_source,omitempty"`
 	ActiveRoute        *fallback.Route    `json:"active_session_route,omitempty"`
 	At                 time.Time          `json:"checked_at"`
@@ -52,6 +55,10 @@ type usageReport struct {
 
 func loadUsage(ctx context.Context, c Context, now time.Time, next bool) (usageReport, error) {
 	report := usageReport{At: now}
+	ledger := budget.Ledger{Dir: filepath.Join(c.Paths.DataDir, "budget", "v1"), Session: os.Getenv("CLOTHER_BUDGET_SESSION"), Config: budget.Defaults(c.Config.Budget)}
+	if b, e := ledger.Summary(); e == nil {
+		report.Budget = &b
+	}
 	if path := os.Getenv("CLOTHER_ROUTE_STATUS"); path != "" {
 		if data, e := os.ReadFile(path); e == nil {
 			var route fallback.Route
@@ -225,6 +232,9 @@ func runUsage(ctx context.Context, c Context, args []string) (int, error) {
 		return 0, json.NewEncoder(c.Output.Stdout).Encode(report)
 	}
 	fmt.Fprintln(c.Output.Stdout, "Clother usage (tracked from v3.5.0 onward; previous sessions are not reconstructed)")
+	if b := report.Budget; b != nil {
+		fmt.Fprintf(c.Output.Stdout, "Paid fallback budget: day $%.6f/$%.2f, session $%.6f/$%.2f (local estimates + reservations, not billed costs).\n", b.Daily, b.DailyLimit, b.Session, b.SessionLimit)
+	}
 	if report.ActiveRoute != nil {
 		fmt.Fprintf(c.Output.Stdout, "Active session backend: %s / %s (free: %t)\n", report.ActiveRoute.Provider, report.ActiveRoute.Model, report.ActiveRoute.Free)
 	}

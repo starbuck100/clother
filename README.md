@@ -732,3 +732,66 @@ $env:CLOTHER_RELEASE_BASE_URL = 'http://127.0.0.1:8000'
 ## License
 
 MIT © [jolehuit](https://github.com/jolehuit)
+
+
+### Live session controls and budgets (v3.6)
+
+Free-model sessions automatically receive a Clother statusline in a temporary
+Claude settings overlay. It shows the actual provider/model, Free/Paid, context,
+known quota, local budget reservations and the latest switch reason. Your original
+settings are preserved; `CLOTHER_STATUSLINE=0` keeps your usual statusline instead.
+Unknown quota is displayed as `?`, particularly for Kilo's shared IP allowance.
+
+- `/clother:next`: try the next eligible route at the next request boundary.
+- `/clother:pin`: keep this backend and stop automatic switches.
+- `/clother:free`: block new paid requests and select an eligible free route.
+- `/clother:auto`: resume the configured automatic fallback policy.
+
+These fixed controls execute before the model request, so they do not depend on a
+model deciding to run a tool. In-flight responses finish; partial output is never
+replayed. After a paid fallback, free recovery checks run at request boundaries,
+at most every five minutes. An eligible free model must pass a small two-turn
+probe before the session returns to it. Probes consume free requests; known quota
+blocks still apply. No background polling is performed while idle.
+
+Paid fallbacks default to **$1 per UTC day and $1 per launched session**:
+
+```sh
+clother config budget 1 1
+clother config budget 0 0   # blocks paid fallback
+clother usage --json
+clother doctor
+clother doctor kilo stealth/space-bunny-alpha probe --json
+```
+
+Budget changes apply to new sessions. Use `/clother:free` to stop new paid requests
+in a running one. The local ledger reserves the model's full context plus bounded
+output at maximum rates before sending a paid request, including across concurrent
+Clother processes. Complete token usage settles conservatively; unknown completion
+retains the reservation. Billed cost, when returned, is tracked separately from
+estimates. The limit covers this installation's automatic fallbacks, not other
+applications or direct paid launches. Changing provider prices or incorrect custom
+rates can differ from billing; provider-side spend caps remain authoritative.
+
+Direct `deepseek-flash` uses current official DeepSeek peak/cache-miss pricing,
+refreshed hourly. Unknown/expired prices block paid inference. Other configured
+keyed endpoints require explicit rates in `config.json`, for example:
+
+```json
+{"budget":{"daily_usd":1,"session_usd":1,"prices":{"my-provider/my-model":{"input_usd_per_million":0.3,"output_usd_per_million":1.2,"expires_at":"2026-10-01T00:00:00Z","source":"your endpoint's verified price schedule"}}}}
+```
+
+Use prices for the actual endpoint, including its maximum applicable charges.
+An unreadable ledger or abandoned `budget/v1/lock` directory blocks paid requests;
+`doctor` reports it. Never delete a lock while Clother processes may still use it.
+The ledger contains metadata only. Unresolved reservations are retained after a
+crash, rather than silently released.
+
+Selection combines exact-version benchmark evidence with local 24-hour response
+success, mean latency and generated tool-call observations. Three consecutive
+non-quota failures put a model on a ten-minute cooldown. These operational metrics
+are not a quality benchmark or proof that a generated tool executed correctly.
+`doctor ... probe` verifies an actual harmless tool round trip and consumes two
+small free requests; it never executes model-generated commands. Without `probe`,
+diagnostics do not perform inference. JSON output omits keys, prompts and raw
+provider responses.

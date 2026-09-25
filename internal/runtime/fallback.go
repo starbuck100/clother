@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jolehuit/clother/internal/benchmarks"
+	"github.com/jolehuit/clother/internal/budget"
 	"github.com/jolehuit/clother/internal/config"
 	"github.com/jolehuit/clother/internal/fallback"
 	"github.com/jolehuit/clother/internal/kilo"
@@ -29,6 +30,11 @@ type routeAccount struct{ base, key, scope string }
 
 func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Target, args, env []string) ([]string, func(), error) {
 	noop := func() {}
+	for _, arg := range args {
+		if arg == "--version" || arg == "-v" || arg == "--help" || arg == "-h" {
+			return env, noop, nil
+		}
+	}
 	if (target.Family != providers.FamilyKilo && target.Family != providers.FamilyOpenRouter) || os.Getenv("CLOTHER_AUTO_FALLBACK") == "0" {
 		return env, noop, nil
 	}
@@ -45,6 +51,8 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 		return nil, noop, err
 	}
 	cfg.ApplyLegacySecrets(secrets, builtins)
+	ledger := budget.Ledger{Dir: filepath.Join(paths.DataDir, "budget", "v1"), Session: budget.ID(), Config: budget.Defaults(cfg.Budget)}
+	events, _ := usage.NewStore(paths.DataDir).Read(time.Now())
 	values := envSliceToMap(env)
 	model := ModelOverride(args)
 	if model == "" {
@@ -112,7 +120,7 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 			v := m.MayTrainOnPrompts
 			mayTrain = &v
 		}
-		return fallback.Route{Provider: id, Model: m.ID, Base: base, Key: key, Context: m.ContextLimit(), Output: out, Free: m.Free(), Images: slices.Contains(m.Architecture.InputModalities, "image"), Reasoning: m.Supports("reasoning"), Benchmark: matches, MayTrain: mayTrain}
+		return fallback.Route{Local: usage.Measure(events, id, accounts[id].scope, m.ID, time.Now()), Provider: id, Model: m.ID, Base: base, Key: key, Context: m.ContextLimit(), Output: out, Free: m.Free(), Images: slices.Contains(m.Architecture.InputModalities, "image"), Reasoning: m.Supports("reasoning"), Benchmark: matches, MayTrain: mayTrain}
 	}
 	routes := []fallback.Route{routeFor(initialProvider, original, values["ANTHROPIC_BASE_URL"], values["ANTHROPIC_AUTH_TOKEN"])}
 	for _, id := range []string{initialProvider, otherFree(initialProvider)} {
@@ -155,7 +163,7 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 	sort.SliceStable(routes[1:], func(i, j int) bool {
 		a, b := routes[i+1], routes[j+1]
 		score := func(r fallback.Route) float64 {
-			v := 0.0
+			v := r.Local.Score()
 			if strings.TrimSuffix(r.Model, ":free") == strings.TrimSuffix(model, ":free") {
 				v += 200
 			}
@@ -188,6 +196,29 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 			}
 			scope := usage.Scope(t.Profile, t.BaseURL, key)
 			transport := &usage.Transport{Store: usage.NewStore(paths.DataDir), Provider: t.Profile, AccountScope: scope, IsFree: func(string) bool { return false }, Warn: warn}
+			var priceMu sync.Mutex
+			var currentPrice budget.Price
+			transport.Before = func(raw []byte, event *usage.Event) (func(usage.Event), error) {
+				priceMu.Lock()
+				defer priceMu.Unlock()
+				now := time.Now()
+				if configured, ok := ledger.Config.Prices[t.Profile+"/"+event.Model]; ok {
+					currentPrice = configured
+				} else if t.Profile == "deepseek" && event.Model == "deepseek-flash" && strings.TrimRight(t.BaseURL, "/") == "https://api.deepseek.com/anthropic" && !currentPrice.Valid(now) {
+					var err error
+					currentPrice, err = budget.DeepSeek(ctx)
+					if err != nil {
+						return nil, fmt.Errorf("paid fallback blocked: current DeepSeek price unavailable")
+					}
+				}
+				var body struct {
+					Max int `json:"max_tokens"`
+				}
+				if json.Unmarshal(raw, &body) != nil || body.Max <= 0 || body.Max > output {
+					return nil, fmt.Errorf("paid fallback blocked: invalid output limit")
+				}
+				return ledger.Reserve(currentPrice, contextLimit, body.Max)
+			}
 			base, token, close, e := openrouter.StartSchemaProxy(ctx, t.BaseURL, key, transport)
 			if e != nil {
 				continue
@@ -201,6 +232,7 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 	var quotaMu sync.Mutex
 	var quotaChecked time.Time
 	var quotaOK bool
+	var quotaRemaining *int
 	router.Check = func(ctx context.Context, r fallback.Route) bool {
 		account := accounts[r.Provider]
 		events, e := usage.NewStore(paths.DataDir).Read(time.Now())
@@ -212,6 +244,9 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 			if event.Provider == r.Provider && event.Scope == account.scope {
 				scoped = append(scoped, event)
 			}
+		}
+		if usage.Measure(scoped, r.Provider, account.scope, r.Model, time.Now()).Cooling(time.Now()) {
+			return false
 		}
 		for _, event := range usage.ActiveBlocks(scoped, time.Now()) {
 			if event.Limit.Kind == "invalid_request" {
@@ -230,8 +265,13 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 			live, e := usage.FetchOpenRouter(ctx, account.base, account.key)
 			quotaChecked = time.Now()
 			quotaOK = false
+			quotaRemaining = nil
 			if e != nil {
 				return false
+			}
+			if live.FreeDaily != nil {
+				v := live.FreeDaily.Remaining
+				quotaRemaining = &v
 			}
 			if r.Free && live.FreeDaily != nil && live.FreeDaily.Remaining == 0 {
 				return false
@@ -243,6 +283,14 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 		}
 		return true
 	}
+	router.Rank = func(r fallback.Route) float64 {
+		events, e := usage.NewStore(paths.DataDir).Read(time.Now())
+		if e != nil {
+			return 0
+		}
+		return usage.Measure(events, r.Provider, accounts[r.Provider].scope, r.Model, time.Now()).Score()
+	}
+	router.Recover = func(ctx context.Context, r fallback.Route) bool { return fallback.ProbeTool(ctx, r) == nil }
 	if os.Getenv("CLOTHER_FALLBACK_PLANNER") != "0" {
 		if e := router.Warm(ctx, launchers.FreeFallbackSkill(), category); e != nil {
 			warn("fallback planner unavailable; using validated catalog/benchmark order")
@@ -265,10 +313,28 @@ func PrepareFallback(ctx context.Context, paths config.Paths, target profiles.Ta
 	}
 	statusPath := status.Name()
 	_ = status.Close()
-	router.Changed = func(r fallback.Route) { data, _ := json.Marshal(r); _ = platform.AtomicWrite(statusPath, data, 0600) }
-	router.Changed(router.Routes[0])
+	var statusMu sync.Mutex
+	router.StateChanged = func(state fallback.State) {
+		statusMu.Lock()
+		defer statusMu.Unlock()
+		if summary, e := ledger.Summary(); e == nil {
+			state.Budget = &summary
+		}
+		quotaMu.Lock()
+		if state.Provider == "openrouter" && time.Since(quotaChecked) < time.Minute {
+			state.QuotaRemaining = quotaRemaining
+			state.QuotaCheckedAt = quotaChecked
+		}
+		quotaMu.Unlock()
+		data, _ := json.Marshal(state)
+		_ = platform.AtomicWrite(statusPath, data, 0600)
+	}
+	router.StateChanged(router.State())
 	cleaners = append(cleaners, func() { _ = os.Remove(statusPath) })
 	values["CLOTHER_ROUTE_STATUS"] = statusPath
+	values["CLOTHER_BUDGET_SESSION"] = ledger.Session
+	values["CLOTHER_CONTROL_URL"] = base
+	values["CLOTHER_CONTROL_TOKEN"] = token
 	values["ANTHROPIC_BASE_URL"] = base
 	values["ANTHROPIC_AUTH_TOKEN"] = token
 	values["ANTHROPIC_API_KEY"] = ""

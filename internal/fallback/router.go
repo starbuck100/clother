@@ -18,9 +18,11 @@ import (
 	"time"
 
 	"github.com/jolehuit/clother/internal/benchmarks"
+	"github.com/jolehuit/clother/internal/usage"
 )
 
 type Route struct {
+	Local     usage.Metrics    `json:"local_observations"`
 	MayTrain  *bool            `json:"may_train_on_prompts,omitempty"`
 	Provider  string           `json:"provider"`
 	Model     string           `json:"model"`
@@ -37,14 +39,22 @@ type Route struct {
 func (r Route) ID() string { return r.Provider + "/" + r.Model }
 
 type Router struct {
-	Routes  []Route
-	Check   func(context.Context, Route) bool
-	Notice  func(string)
-	Changed func(Route)
-	Client  *http.Client
-	mu      sync.Mutex
-	active  int
-	token   string
+	StateChanged            func(State)
+	Recover                 func(context.Context, Route) bool
+	Rank                    func(Route) float64
+	RecoveryInterval        time.Duration
+	gate                    chan struct{}
+	pinned, freeOnly        bool
+	pending, reason         string
+	changedAt, lastRecovery time.Time
+	Routes                  []Route
+	Check                   func(context.Context, Route) bool
+	Notice                  func(string)
+	Changed                 func(Route)
+	Client                  *http.Client
+	mu                      sync.Mutex
+	active                  int
+	token                   string
 }
 
 func (r *Router) Start() (string, string, func(), error) {
@@ -56,6 +66,10 @@ func (r *Router) Start() (string, string, func(), error) {
 		return "", "", nil, err
 	}
 	r.token = hex.EncodeToString(random)
+	r.gate = make(chan struct{}, 1)
+	r.changedAt = time.Now()
+	r.lastRecovery = time.Now()
+	r.reason = "session started"
 	if r.Client == nil {
 		r.Client = &http.Client{Timeout: 10 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
@@ -82,6 +96,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		fail(w, 401, "invalid session token")
 		return
 	}
+	if req.URL.Path == "/clother/control" {
+		r.control(w, req)
+		return
+	}
 	if req.Method != "POST" || req.URL.Path != "/v1/messages" {
 		fail(w, 501, "automatic routing supports Messages; exact token counting unavailable")
 		return
@@ -96,6 +114,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		fail(w, 400, "invalid Messages request")
 		return
 	}
+	// Serialize request boundaries, including complete streams. Controls remain
+	// responsive and affect the next request, never an in-flight tool stream.
+	if r.gate != nil {
+		select {
+		case r.gate <- struct{}{}:
+			defer func() { <-r.gate }()
+		case <-req.Context().Done():
+			return
+		}
+	}
 	r.mu.Lock()
 	initial := r.active
 	r.mu.Unlock()
@@ -106,12 +134,17 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	required += images * 8192
 	tried := map[int]bool{}
 	blocked := map[string]bool{}
-	chosen := initial
+	chosen, switchReason := r.initialRoute(req.Context(), required, images > 0)
+	if chosen < 0 {
+		fail(w, 429, "Clother: no eligible next model; current selection retained")
+		r.publish()
+		return
+	}
 	attempts := 0
 	notice := ""
 	for attempts < 6 {
 		route := r.Routes[chosen]
-		eligible := !tried[chosen] && !blocked[route.Provider] && route.Context >= required && (images == 0 || route.Images)
+		eligible := r.allowed(chosen) && !tried[chosen] && !blocked[route.Provider] && route.Context >= required && (images == 0 || route.Images)
 		if eligible && r.Check != nil {
 			eligible = r.Check(req.Context(), route)
 		}
@@ -182,6 +215,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				status = streamStatus(reject)
 			}
 			if status == 429 || status == 402 || status == 401 || status == 503 || status == 502 || status == 500 {
+				switch status {
+				case 429:
+					switchReason = route.Provider + " quota/rate limit (HTTP 429)"
+				case 402:
+					switchReason = route.Provider + " budget/credit limit (HTTP 402)"
+				case 401:
+					switchReason = route.Provider + " authentication failed"
+				default:
+					switchReason = fmt.Sprintf("%s provider error (HTTP %d)", route.Provider, status)
+				}
 				// Unknown/gateway quota and outages skip the entire provider. Only an
 				// explicit upstream-model rate limit allows another model on that gateway.
 				text := strings.ToLower(string(reject))
@@ -200,7 +243,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
 		changed := r.active != chosen
 		r.active = chosen
+		if changed {
+			r.changedAt = time.Now()
+			r.lastRecovery = time.Now()
+			r.reason = switchReason
+			if r.reason == "" {
+				r.reason = "previous route rejected or unavailable"
+			}
+		}
 		r.mu.Unlock()
+		r.publish()
 		if changed && r.Changed != nil {
 			r.Changed(route)
 		}
@@ -244,12 +296,27 @@ func price(route Route) string {
 	return "configured API key; may incur cost"
 }
 func (r *Router) next(tried map[int]bool, blocked map[string]bool, required int, images bool) int {
+	best := -1
+	bestScore := -1e20
 	for i, v := range r.Routes {
-		if !tried[i] && !blocked[v.Provider] && v.Context >= required && (!images || v.Images) {
-			return i
+		if tried[i] || blocked[v.Provider] || v.Context < required || (images && !v.Images) || !r.allowed(i) {
+			continue
+		}
+		score := -float64(i) * 0.01
+		if v.Free {
+			score += 10000
+			if r.Rank != nil {
+				score += r.Rank(v)
+			}
+		} else {
+			score -= float64(i)
+		}
+		if score > bestScore {
+			best = i
+			bestScore = score
 		}
 	}
-	return -1
+	return best
 }
 func rewrite(body map[string]any, route Route, required int, migrated bool) ([]byte, error) {
 	copy := map[string]any{}

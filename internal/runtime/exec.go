@@ -25,6 +25,12 @@ type RunOptions struct {
 
 func Launch(ctx context.Context, paths config.Paths, target profiles.Target, args []string, env []string, options RunOptions) (int, error) {
 	args = NormalizeClaudeArgs(args)
+	// A nested launch must never inherit control of its parent's live router.
+	values := envSliceToMap(env)
+	for _, key := range []string{"CLOTHER_CONTROL_URL", "CLOTHER_CONTROL_TOKEN", "CLOTHER_ROUTE_STATUS", "CLOTHER_BUDGET_SESSION"} {
+		delete(values, key)
+	}
+	env = flattenEnv(values)
 	var cleanup func()
 	var err error
 	env, err = PrepareOpenRouterEnv(ctx, paths.CacheDir, target, args, env)

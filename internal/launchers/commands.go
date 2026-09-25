@@ -34,16 +34,20 @@ func commandPath(configDir, name string) string {
 // directory, in the order they are written.
 //
 // Their content is instructions plus a call to the hidden helper. There is
-// deliberately no backtick command substitution in any of them: argument
+// no backtick command substitution in argument-taking commands: argument
 // substitution runs over the whole document *before* the shell pass, so a
 // placeholder inside such a line would put whatever the user typed into command
 // position, where `;` and backticks are syntax rather than text.
-// TestGeneratedCommandsContainNoShellExecution is what keeps that true.
+// Fixed no-argument controls use pre-inference execution; tests enforce that boundary.
 var commandTemplates = []commandTemplate{
 	{name: "provider.md", body: providerCommand},
 	{name: "config.md", body: configCommand},
 	{name: "status.md", body: statusCommand},
 	{name: "usage.md", body: usageCommand},
+	{name: "next.md", body: controlCommand("next", "Switch to the next eligible model in this running session.")},
+	{name: "pin.md", body: controlCommand("pin", "Keep the current model; stop automatic model changes.")},
+	{name: "free.md", body: controlCommand("free", "Allow only free models in this running session.")},
+	{name: "auto.md", body: controlCommand("auto", "Resume automatic selection with the configured paid fallback policy.")},
 }
 
 type commandTemplate struct {
@@ -270,4 +274,18 @@ func statusCommand(clother string) string {
 
 func usageCommand(clother string) string {
 	return commandFrontmatter("Show local usage and provider free quotas, or compare free models.", "[next] [provider] [model]", clother) + "\nRun the helper with the request arguments as data:\n    " + invoke(clother) + " __session usage <arguments>\nReport measured usage, unknown counters and quota scope accurately. Do not change providers.\n" + dataNotice + "\nRequest: $ARGUMENTS\n"
+}
+
+// Fixed controls run before inference, so a quota failure cannot prevent them.
+// Unlike argument-taking commands, no user input enters the shell snippet.
+func controlCommand(action, description string) func(string) string {
+	return func(clother string) string {
+		text := commandFrontmatter(description, "", clother)
+		if strings.ContainsAny(clother, "`\r\n$") {
+			return text + "\nRun this exact helper and report its output:\n    " + invoke(clother) + " __session " + action + "\n"
+		}
+		path := strings.ReplaceAll(clother, `\`, "/")
+		quoted := "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
+		return text + "\nClother control result (already executed before this model request):\n!`" + quoted + " __session " + action + "`\n\nReport the result briefly. Do not run the control again. No restart or arguments are required.\n" + dataNotice
+	}
 }

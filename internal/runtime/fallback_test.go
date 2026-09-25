@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"github.com/jolehuit/clother/internal/budget"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jolehuit/clother/internal/config"
 	"github.com/jolehuit/clother/internal/profiles"
@@ -21,8 +23,9 @@ func TestSessionFallbackPaidOptInAndLiveQuota(t *testing.T) {
 	t.Setenv("CLOTHER_FALLBACK_PLANNER", "0")
 	t.Setenv("CLOTHER_PAID_FALLBACK", "")
 	t.Setenv("CLOTHER_AUTO_FALLBACK", "")
-	for _, paid := range []bool{false, true} {
-		t.Run(fmt.Sprint(paid), func(t *testing.T) {
+	for _, mode := range []string{"free-only", "paid", "unknown-price", "zero-budget"} {
+		paid := mode != "free-only"
+		t.Run(mode, func(t *testing.T) {
 			var paidCalls, quotaCalls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -51,6 +54,13 @@ func TestSessionFallbackPaidOptInAndLiveQuota(t *testing.T) {
 			root := t.TempDir()
 			paths := config.Paths{ConfigFile: filepath.Join(root, "config.json"), SecretsFile: filepath.Join(root, "secrets.env"), CacheDir: filepath.Join(root, "cache"), DataDir: root}
 			cfg := &config.File{Version: 1, FallbackPaid: paid, ProviderOverrides: map[string]config.ProviderOverride{"kilo": {Model: "test/free", BaseURL: server.URL + "/kilo"}, "openrouter": {Model: "test/free", BaseURL: server.URL + "/or"}, "deepseek": {BaseURL: server.URL + "/ds"}}}
+			cfg.Budget = &budget.Config{Daily: 1, Session: 1, Prices: map[string]budget.Price{"deepseek/deepseek-flash": {Input: 0.3, Output: 1.2, Expires: time.Now().Add(time.Hour), Source: "explicit test endpoint price"}}}
+			if mode == "unknown-price" {
+				cfg.Budget.Prices = nil
+			}
+			if mode == "zero-budget" {
+				cfg.Budget.Daily = 0
+			}
 			if e := config.SaveConfig(paths.ConfigFile, cfg); e != nil {
 				t.Fatal(e)
 			}
@@ -73,7 +83,11 @@ func TestSessionFallbackPaidOptInAndLiveQuota(t *testing.T) {
 			}
 			defer resp.Body.Close()
 			data, _ := io.ReadAll(resp.Body)
-			if paid {
+			if mode == "unknown-price" || mode == "zero-budget" {
+				if resp.StatusCode != 402 || paidCalls.Load() != 0 {
+					t.Fatalf("unbudgeted request: %d calls %d", resp.StatusCode, paidCalls.Load())
+				}
+			} else if paid {
 				if resp.StatusCode != 200 || paidCalls.Load() != 1 || !strings.Contains(string(data), "may incur cost") {
 					t.Fatalf("%d %s", resp.StatusCode, data)
 				}
@@ -84,5 +98,16 @@ func TestSessionFallbackPaidOptInAndLiveQuota(t *testing.T) {
 				t.Fatalf("quota check count %d", quotaCalls.Load())
 			}
 		})
+	}
+}
+
+func TestInformationalLaunchSkipsFallbackInference(t *testing.T) {
+	for _, arg := range []string{"--version", "-v", "--help", "-h"} {
+		env := []string{"unchanged=yes"}
+		result, close, err := PrepareFallback(context.Background(), config.Paths{ConfigFile: "not-a-file"}, profiles.Target{Family: providers.FamilyKilo}, []string{arg}, env)
+		if err != nil || len(result) != 1 || result[0] != env[0] {
+			t.Fatalf("%s did not bypass inference: %v", arg, err)
+		}
+		close()
 	}
 }

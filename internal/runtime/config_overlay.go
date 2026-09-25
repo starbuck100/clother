@@ -35,6 +35,11 @@ func PrepareClaudeConfigOverlay(target profiles.Target, args []string, env []str
 	}
 
 	claudeEnv := anthropicEnv(envMap)
+	for _, key := range []string{"CLOTHER_ROUTE_STATUS", "CLOTHER_BUDGET_SESSION", "CLOTHER_CONTROL_URL", "CLOTHER_CONTROL_TOKEN", "CLOTHER_STATUSLINE"} {
+		if value, ok := envMap[key]; ok {
+			claudeEnv[key] = value
+		}
+	}
 	if target.Family == providers.FamilyKilo {
 		claudeEnv["ENABLE_TOOL_SEARCH"] = "false"
 	}
@@ -209,6 +214,20 @@ func writePatchedClaudeSettings(sourceDir, overlayDir, sessionModel string, envM
 	}
 
 	settings["model"] = sessionModel
+	if envMap["CLOTHER_ROUTE_STATUS"] != "" && envMap["CLOTHER_STATUSLINE"] != "0" {
+		if exe, e := os.Executable(); e == nil {
+			// Temporary session overlay; original user settings remain untouched.
+			executable := filepath.ToSlash(exe)
+			if strings.HasPrefix(strings.ToLower(filepath.Base(exe)), "clother-") {
+				candidate := filepath.Join(filepath.Dir(exe), platform.BinaryName())
+				if _, e := os.Stat(candidate); e == nil {
+					executable = filepath.ToSlash(candidate)
+				}
+			}
+			quoted := "'" + strings.ReplaceAll(executable, "'", "'\"'\"'") + "'"
+			settings["statusLine"] = map[string]any{"type": "command", "command": quoted + " __session statusline"}
+		}
+	}
 	settingsEnv := map[string]any{}
 	if existing, ok := settings["env"].(map[string]any); ok {
 		for key, value := range existing {
@@ -220,6 +239,12 @@ func writePatchedClaudeSettings(sourceDir, overlayDir, sessionModel string, envM
 	}
 	for key, value := range envMap {
 		settingsEnv[key] = value
+	}
+	// Do not let a nested session inherit its parent router through settings.
+	for _, key := range []string{"CLOTHER_CONTROL_URL", "CLOTHER_CONTROL_TOKEN", "CLOTHER_ROUTE_STATUS", "CLOTHER_BUDGET_SESSION"} {
+		if _, ok := envMap[key]; !ok {
+			delete(settingsEnv, key)
+		}
 	}
 	settings["env"] = settingsEnv
 
